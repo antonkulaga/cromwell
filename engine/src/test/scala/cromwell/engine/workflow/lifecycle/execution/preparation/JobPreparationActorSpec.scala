@@ -2,14 +2,13 @@ package cromwell.engine.workflow.lifecycle.execution.preparation
 
 import akka.testkit.{ImplicitSender, TestActorRef}
 import cromwell.core.actor.StreamIntegration.BackPressure
-import cromwell.docker.DockerHashActor.{DockerHashFailedResponse, DockerHashResponseSuccess}
-import cromwell.docker.{DockerHashRequest, DockerHashResult, DockerImageIdentifier, DockerImageIdentifierWithoutHash}
 import cromwell.core.callcaching.{CallCachingEligible, CallCachingIneligible}
 import cromwell.core.{LocallyQualifiedName, TestKitSuite}
+import cromwell.docker.DockerHashActor.{DockerHashFailedResponse, DockerHashSuccessResponse}
+import cromwell.docker.{DockerHashRequest, DockerHashResult, DockerImageIdentifier, DockerImageIdentifierWithoutHash}
 import cromwell.engine.workflow.lifecycle.execution.preparation.CallPreparation.{BackendJobPreparationSucceeded, CallPreparationFailed, Start}
 import cromwell.services.keyvalue.KeyValueServiceActor.{KvGet, KvKeyLookupFailed, KvPair}
-import org.scalatest.BeforeAndAfter
-import org.scalatest.{FlatSpecLike, Matchers}
+import org.scalatest.{BeforeAndAfter, FlatSpecLike, Matchers}
 import org.specs2.mock.Mockito
 import wdl4s.Declaration
 import wdl4s.values.{WdlString, WdlValue}
@@ -97,7 +96,7 @@ class JobPreparationActorSpec extends TestKitSuite("JobPrepActorSpecSystem") wit
     respondFromKv()
 
     val req = helper.dockerHashingActor.expectMsgClass(classOf[DockerHashRequest])
-    helper.dockerHashingActor.reply(DockerHashResponseSuccess(hashResult, req))
+    helper.dockerHashingActor.reply(DockerHashSuccessResponse(hashResult, req))
     expectMsgPF(5 seconds) {
       case success: BackendJobPreparationSucceeded =>
         success.jobDescriptor.prefetchedKvStoreEntries should be(Map(prefetchedKey1 -> prefetchedVal1, prefetchedKey2 -> prefetchedVal2))
@@ -115,7 +114,7 @@ class JobPreparationActorSpec extends TestKitSuite("JobPrepActorSpecSystem") wit
     val actor = TestActorRef(helper.buildTestJobPreparationActor(1 minute, 1 minutes, List.empty, inputsAndAttributes, List.empty), self)
     actor ! Start
     helper.dockerHashingActor.expectMsgClass(classOf[DockerHashRequest])
-    helper.dockerHashingActor.reply(DockerHashResponseSuccess(hashResult, mock[DockerHashRequest]))
+    helper.dockerHashingActor.reply(DockerHashSuccessResponse(hashResult, mock[DockerHashRequest]))
     expectMsgPF(5 seconds) {
       case success: BackendJobPreparationSucceeded =>
         success.jobDescriptor.runtimeAttributes("docker").valueString shouldBe finalValue

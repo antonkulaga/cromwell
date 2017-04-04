@@ -6,7 +6,7 @@ import cromwell.backend.validation.{DockerValidation, RuntimeAttributesKeys}
 import cromwell.core.Dispatcher.EngineDispatcher
 import cromwell.core.callcaching._
 import cromwell.core.logging.WorkflowLogging
-import cromwell.docker.DockerHashActor.{DockerHashFailureResponse, DockerHashResponseSuccess}
+import cromwell.docker.DockerHashActor.{DockerHashFailureResponse, DockerHashSuccessResponse}
 import cromwell.docker._
 import cromwell.engine.workflow.lifecycle.execution.WorkflowExecutionActorData
 import cromwell.engine.workflow.lifecycle.execution.preparation.CallPreparation._
@@ -67,7 +67,7 @@ class JobPreparationActor(executionData: WorkflowExecutionActorData,
   }
 
   when(WaitingForDockerHash) {
-    case Event(DockerHashResponseSuccess(dockerHash, _), data: JobPreparationHashLookupData) =>
+    case Event(DockerHashSuccessResponse(dockerHash, _), data: JobPreparationHashLookupData) =>
       handleDockerHashSuccess(dockerHash, data)
     case Event(failureResponse: DockerHashFailureResponse, data: JobPreparationHashLookupData) =>
       log.warning(failureResponse.reason)

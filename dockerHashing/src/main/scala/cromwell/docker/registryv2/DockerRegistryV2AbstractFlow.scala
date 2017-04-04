@@ -268,7 +268,7 @@ abstract class DockerRegistryV2AbstractFlow(httpClientFlow: HttpDockerFlow)(impl
     */
   private def extractContentDigest(headers: Seq[HttpHeader], dockerHashContext: DockerHashContext) = {
     headers find { _.is(DigestHeaderName) } match {
-      case Some(digestHeader) => Success(DockerHashResponseSuccess(DockerHashResult(digestHeader.value()), dockerHashContext.request))
+      case Some(digestHeader) => Success(DockerHashSuccessResponse(DockerHashResult(digestHeader.value()), dockerHashContext.request))
       case None => Failure(new Exception("Cannot find digest header"))
     }
   }
