@@ -1,19 +1,21 @@
 package cromwell.engine.workflow
 
 import akka.actor.{ActorRef, LoggingFSM}
-import cromwell.core.WorkflowId
+import cromwell.core.{Dispatcher, WorkflowId}
 import cromwell.core.callcaching.docker.DockerHashActor.{DockerHashFailureResponse, DockerHashSuccessResponse}
 import cromwell.core.callcaching.docker._
 import cromwell.database.sql.tables.DockerHashStoreEntry
 import cromwell.engine.workflow.WorkflowDockerLookupActor._
 import cromwell.services.SingletonServicesStore
+import lenthall.util.TryUtil
 
 import scala.collection.immutable.Queue
-import scala.language.postfixOps
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 class WorkflowDockerLookupActor(workflowId: WorkflowId, val dockerHashingActor: ActorRef, restart: Boolean) 
   extends LoggingFSM[WorkflowDockerLookupActorState, WorkflowDockerLookupActorData] with DockerClientHelper with SingletonServicesStore {
+  
+  implicit val ec = context.system.dispatchers.lookup(Dispatcher.EngineDispatcher)
   
   if (restart) {
     startWith(LoadingCache, WorkflowDockerLookupActorData.empty)
@@ -29,18 +31,19 @@ class WorkflowDockerLookupActor(workflowId: WorkflowId, val dockerHashingActor: 
             entry.dockerTag -> entry.dockerHash
           } toMap
           
-          self ! DockerHashStoreQuerySuccess(dockerMappings)
-        case Failure(ex) => self ! DockerHashStoreQueryFailure(ex)
+          self ! DockerHashStoreLoadingSuccess(dockerMappings)
+        case Failure(ex) => self ! DockerHashStoreLoadingFailure(ex)
       }
     }
     super.preStart()
   }
 
   when(LoadingCache) {
-    case Event(DockerHashStoreQuerySuccess(dockerHashEntries), data) =>
+    case Event(DockerHashStoreLoadingSuccess(dockerHashEntries), data) =>
       loadCache(dockerHashEntries)
-    case Event(DockerHashStoreQueryFailure(reason), _) =>
-      throw reason
+    case Event(DockerHashStoreLoadingFailure(reason), _) =>
+      log.error(reason, "Failed to load docker tag -> hash mappings from DB")
+      context stop self
       stay()
   }
   
@@ -70,9 +73,18 @@ class WorkflowDockerLookupActor(workflowId: WorkflowId, val dockerHashingActor: 
     case Event(DockerHashActorTimeout, data: WorkflowDockerLookupActorDataWithRequest) =>
       replyAndCheckForWork(DockerLookupTimeout(data.currentRequest.dockerHashRequest), data)
   }
-  
-  def loadCache(hashEntries: Map[String, String]) = { hashEntries map {
-    case (dockerTag, dockerHash) => DockerImageIdentifier.fromString(dockerTag) -> DockerHashResult(dockerHash)
+
+  def loadCache(hashEntries: Map[String, String]) = {
+    val dockerMappingsTry = hashEntries map {
+      case (dockerTag, dockerHash) => DockerImageIdentifier.fromString(dockerTag) -> Try(DockerHashResult(dockerHash))
+    }
+    
+    TryUtil.sequenceKeyValues(dockerMappingsTry) match {
+      case Success(dockerMappings) => goto(Idle) using WorkflowDockerLookupActorDataNoRequest(dockerMappings)
+      case Failure(reason) =>
+        log.error(reason, "Failed to load docker tag -> hash mappings from DB")
+        context stop self
+        stay()
     }
   }
   
@@ -115,42 +127,43 @@ class WorkflowDockerLookupActor(workflowId: WorkflowId, val dockerHashingActor: 
 
 object WorkflowDockerLookupActor {
   /* States */
-  private sealed trait WorkflowDockerLookupActorState
-  private case object LoadingCache extends WorkflowDockerLookupActorState
-  private case object Idle extends WorkflowDockerLookupActorState
-  private case object WaitingForDockerHashLookup extends WorkflowDockerLookupActorState
-  private case object WaitingForDockerHashStore extends WorkflowDockerLookupActorState
+  sealed trait WorkflowDockerLookupActorState
+  case object LoadingCache extends WorkflowDockerLookupActorState
+  case object Idle extends WorkflowDockerLookupActorState
+  case object WaitingForDockerHashLookup extends WorkflowDockerLookupActorState
+  case object WaitingForDockerHashStore extends WorkflowDockerLookupActorState
 
   /* Internal ADTs */
-  private case class DockerRequestContext(dockerHashRequest: DockerHashRequest, replyTo: ActorRef)
-  private sealed trait DockerHashStoreResponse
-  private case class DockerHashStoreSuccess(successResponse: DockerHashSuccessResponse) extends DockerHashStoreResponse
-  private case class DockerHashStoreFailure(reason: Throwable) extends DockerHashStoreResponse
-  private case class DockerHashStoreQuerySuccess(dockerMappings: Map[String, String])
-  private case class DockerHashStoreQueryFailure(reason: Throwable)
-  private case object DockerHashActorTimeout
+  case class DockerRequestContext(dockerHashRequest: DockerHashRequest, replyTo: ActorRef)
+  sealed trait DockerHashStoreResponse
+  case class DockerHashStoreSuccess(successResponse: DockerHashSuccessResponse) extends DockerHashStoreResponse
+  case class DockerHashStoreFailure(reason: Throwable) extends DockerHashStoreResponse
+  case class DockerHashStoreLoadingSuccess(dockerMappings: Map[String, String])
+  case class DockerHashStoreLoadingFailure(reason: Throwable)
+  case object DockerHashActorTimeout
   
   /* Responses */
   sealed trait WorkflowLookupFailure
+  final case class DockerLookupLoadingFailure(reason: Throwable) extends WorkflowLookupFailure
   final case class DockerLookupStorageFailure(request: DockerHashRequest, reason: Throwable) extends WorkflowLookupFailure
   final case class DockerLookupTimeout(request: DockerHashRequest) extends WorkflowLookupFailure
   
   /* Data */
-  private object WorkflowDockerLookupActorData {
+  object WorkflowDockerLookupActorData {
     def empty = WorkflowDockerLookupActorDataNoRequest(Map.empty)
   }
 
-  private sealed trait WorkflowDockerLookupActorData {
+  sealed trait WorkflowDockerLookupActorData {
     def enqueue(request: DockerHashRequest, replyTo: ActorRef): WorkflowDockerLookupActorDataWithRequest
   }
 
-  private case class WorkflowDockerLookupActorDataNoRequest(dockerMappings: Map[DockerImageIdentifierWithoutHash, DockerHashResult]) extends WorkflowDockerLookupActorData {
+  case class WorkflowDockerLookupActorDataNoRequest(dockerMappings: Map[DockerImageIdentifier, DockerHashResult]) extends WorkflowDockerLookupActorData {
     def enqueue(request: DockerHashRequest, replyTo: ActorRef) = {
       WorkflowDockerLookupActorDataWithRequest(dockerMappings, Queue.empty, DockerRequestContext(request, replyTo))
     } 
   }
 
-  private case class WorkflowDockerLookupActorDataWithRequest(dockerMappings: Map[DockerImageIdentifierWithoutHash, DockerHashResult],
+  case class WorkflowDockerLookupActorDataWithRequest(dockerMappings: Map[DockerImageIdentifier, DockerHashResult],
                                                               awaitingDockerRequests: Queue[DockerRequestContext],
                                                               currentRequest: DockerRequestContext) extends WorkflowDockerLookupActorData {
     
