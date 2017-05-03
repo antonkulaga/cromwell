@@ -2,9 +2,9 @@ package cromwell.engine.workflow
 
 import akka.actor.{ActorRef, LoggingFSM}
 import cromwell.core.{Dispatcher, WorkflowId}
-import cromwell.core.callcaching.docker.DockerHashActor.{DockerHashFailureResponse, DockerHashSuccessResponse}
-import cromwell.core.callcaching.docker._
 import cromwell.database.sql.tables.DockerHashStoreEntry
+import cromwell.docker.DockerHashActor.{DockerHashFailureResponse, DockerHashSuccessResponse}
+import cromwell.docker.{DockerClientHelper, DockerHashRequest, DockerHashResult, DockerImageIdentifier}
 import cromwell.engine.workflow.WorkflowDockerLookupActor._
 import cromwell.services.SingletonServicesStore
 import lenthall.util.TryUtil
@@ -42,6 +42,7 @@ class WorkflowDockerLookupActor(workflowId: WorkflowId, val dockerHashingActor: 
     case Event(DockerHashStoreLoadingSuccess(dockerHashEntries), data) =>
       loadCache(dockerHashEntries)
     case Event(DockerHashStoreLoadingFailure(reason), _) =>
+      // FIXME: apply the decided policy in case of store loading failure
       log.error(reason, "Failed to load docker tag -> hash mappings from DB")
       context stop self
       stay()
@@ -57,6 +58,7 @@ class WorkflowDockerLookupActor(workflowId: WorkflowId, val dockerHashingActor: 
     case Event(dockerResponse: DockerHashSuccessResponse, data: WorkflowDockerLookupActorDataWithRequest) =>
       handleLookupSuccess(dockerResponse, data)
     case Event(dockerResponse: DockerHashFailureResponse, data: WorkflowDockerLookupActorDataWithRequest) =>
+      // FIXME: apply the decided policy in case of lookup failure
       replyAndCheckForWork(dockerResponse, data)
   }
 
@@ -64,6 +66,7 @@ class WorkflowDockerLookupActor(workflowId: WorkflowId, val dockerHashingActor: 
     case Event(DockerHashStoreSuccess(result), data: WorkflowDockerLookupActorDataWithRequest) =>
       replyAndCheckForWork(result, data)
     case Event(DockerHashStoreFailure(reason), data: WorkflowDockerLookupActorDataWithRequest) =>
+      // FIXME: apply the decided policy in case of store reading failure
       replyAndCheckForWork(DockerLookupStorageFailure(data.currentRequest.dockerHashRequest, reason), data)
   }
   
@@ -71,6 +74,7 @@ class WorkflowDockerLookupActor(workflowId: WorkflowId, val dockerHashingActor: 
     case Event(request: DockerHashRequest, data) =>
       stay() using data.enqueue(request, sender())
     case Event(DockerHashActorTimeout, data: WorkflowDockerLookupActorDataWithRequest) =>
+      // FIXME: apply the decided policy in case of lookup failure
       replyAndCheckForWork(DockerLookupTimeout(data.currentRequest.dockerHashRequest), data)
   }
 
@@ -80,6 +84,9 @@ class WorkflowDockerLookupActor(workflowId: WorkflowId, val dockerHashingActor: 
     }
     
     TryUtil.sequenceKeyValues(dockerMappingsTry) match {
+      // FIXME: this is wrong, we might have received requests while waiting for mappings
+      // We need to use the current data, add the mappings, and start processing potential requests that
+      // were enqueued
       case Success(dockerMappings) => goto(Idle) using WorkflowDockerLookupActorDataNoRequest(dockerMappings)
       case Failure(reason) =>
         log.error(reason, "Failed to load docker tag -> hash mappings from DB")

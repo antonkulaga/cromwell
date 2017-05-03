@@ -71,7 +71,7 @@ object DockerCliFlow {
     DockerHashActor.logger.debug("Looking up hash of {}", dockerCliKey.fullName)
     val result = DockerCliClient.lookupHash(dockerCliKey) match {
       case Success(None) => DockerHashNotFound(context.request)
-      case Success(Some(hash)) => DockerHashResponseSuccess(DockerHashResult(hash), context.request)
+      case Success(Some(hash)) => DockerHashSuccessResponse(DockerHashResult(hash), context.request)
       case Failure(throwable) => DockerHashFailedResponse(throwable, context.request)
     }
     // give the compiler a hint on the debug() override we're trying to use.
