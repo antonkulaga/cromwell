@@ -26,7 +26,7 @@ class EngineJobHashingActorSpec extends TestKitSuite with FlatSpecLike with Matc
     call.task returns task
     val workflowDescriptor = mock[BackendWorkflowDescriptor]
     workflowDescriptor.id returns WorkflowId.randomId()
-    val jobDescriptor = BackendJobDescriptor(workflowDescriptor, BackendJobDescriptorKey(call, None, 1), Map.empty, fqnMapToDeclarationMap(inputs), CallCachingEligible, Map.empty)
+    val jobDescriptor = BackendJobDescriptor(workflowDescriptor, BackendJobDescriptorKey(call, None, 1), Map.empty, fqnMapToDeclarationMap(inputs), NoDocker, Map.empty)
     jobDescriptor
   }
 

@@ -12,6 +12,7 @@ import cromwell.core._
 import cromwell.core.logging.WorkflowLogging
 import cromwell.engine.backend.{BackendSingletonCollection, CromwellBackends}
 import cromwell.engine.workflow.lifecycle.execution.ExecutionStore.RunnableScopes
+import cromwell.engine.workflow.WorkflowDockerLookupActor
 import cromwell.engine.workflow.lifecycle.execution.WorkflowExecutionActor._
 import cromwell.engine.workflow.lifecycle.{EngineLifecycleActorAbortCommand, EngineLifecycleActorAbortedResponse}
 import cromwell.engine.{ContinueWhilePossible, EngineWorkflowDescriptor}
@@ -49,6 +50,8 @@ case class WorkflowExecutionActor(workflowDescriptor: EngineWorkflowDescriptor,
   override val workflowIdForCallMetadata = workflowDescriptor.id
 
   private val tag = s"WorkflowExecutionActor [UUID(${workflowDescriptor.id.shortString})]"
+  
+  private val workflowDockerLookupActor = context.actorOf(WorkflowDockerLookupActor.props(workflowDescriptor.id, dockerHashActor, restarting))
 
   private val backendFactories = TryUtil.sequenceMap(workflowDescriptor.backendAssignments.values.toSet[String] map { backendName =>
     backendName -> CromwellBackends.backendLifecycleFactoryActorByName(backendName)
@@ -475,7 +478,7 @@ case class WorkflowExecutionActor(workflowDescriptor: EngineWorkflowDescriptor,
             val backendSingleton = backendSingletonCollection.backendSingletonActors(backendName)
             val ejeaProps = EngineJobExecutionActor.props(
               self, jobKey, data, factory, initializationData.get(backendName), restarting, serviceRegistryActor, ioActor,
-              jobStoreActor, callCacheReadActor, callCacheWriteActor, dockerHashActor, jobTokenDispenserActor, backendSingleton, backendName, workflowDescriptor.callCachingMode)
+              jobStoreActor, callCacheReadActor, callCacheWriteActor, workflowDockerLookupActor, jobTokenDispenserActor, backendSingleton, backendName, workflowDescriptor.callCachingMode)
             val ejeaRef = context.actorOf(ejeaProps, ejeaName)
             context watch ejeaRef
             pushNewCallMetadata(jobKey, Option(backendName))

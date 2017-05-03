@@ -1,17 +1,14 @@
 package cromwell.core.callcaching
 
 sealed trait CallCachingEligibility
-case object CallCachingEligible extends CallCachingEligibility
+sealed trait CallCachingEligible extends CallCachingEligibility
 sealed trait CallCachingIneligible extends CallCachingEligibility {
   def message: String
 }
   
-case class FloatingDockerTagWithHash(hash: String) extends CallCachingIneligible {
-  override val message = s"""You are using a floating docker tag in this task. Cromwell does not consider tasks with floating tags to be eligible for call caching.
-        |If you want this task to be eligible for call caching in the future, use a docker runtime attribute with a digest instead.
-        |This is the exact docker image that was used for this job: $hash
-        |You can replace the docker runtime attribute in your task with the above value to make this task eligible for call caching.""".stripMargin
-}
+case object NoDocker extends CallCachingEligible
+case class DockerWithHash(dockerAttribute: String) extends CallCachingEligible
+case class FloatingDockerTagWithHash(dockerAttributeWithTag: String, dockerAttributeWithHash: String) extends CallCachingEligible
 
 case object FloatingDockerTagWithoutHash extends CallCachingIneligible {
   override val message = s"""You are using a floating docker tag in this task. Cromwell does not consider tasks with floating tags to be eligible for call caching.

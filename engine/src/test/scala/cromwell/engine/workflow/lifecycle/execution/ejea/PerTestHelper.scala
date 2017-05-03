@@ -7,7 +7,7 @@ import akka.testkit.{TestFSMRef, TestProbe}
 import cromwell.backend._
 import cromwell.backend.standard.callcaching._
 import cromwell.core.JobExecutionToken.JobExecutionTokenType
-import cromwell.core.callcaching.{CallCachingActivity, CallCachingEligible, CallCachingMode, CallCachingOff}
+import cromwell.core.callcaching._
 import cromwell.core.{CallOutputs, JobExecutionToken, WorkflowId}
 import cromwell.engine.EngineWorkflowDescriptor
 import cromwell.engine.workflow.lifecycle.execution.EngineJobExecutionActor.{EJEAData, EngineJobExecutionActorState}
@@ -54,7 +54,7 @@ private[ejea] class PerTestHelper(implicit val system: ActorSystem) extends Mock
   val jobDescriptorKey = BackendJobDescriptorKey(call, jobIndex, jobAttempt)
 
   val backendWorkflowDescriptor = BackendWorkflowDescriptor(workflowId, null, null, null, null)
-  val backendJobDescriptor = BackendJobDescriptor(backendWorkflowDescriptor, jobDescriptorKey, runtimeAttributes = Map.empty, inputDeclarations = Map.empty, CallCachingEligible, Map.empty)
+  val backendJobDescriptor = BackendJobDescriptor(backendWorkflowDescriptor, jobDescriptorKey, runtimeAttributes = Map.empty, inputDeclarations = Map.empty, NoDocker, Map.empty)
 
   var fetchCachedResultsActorCreations: ExpectOne[(CallCachingEntryId, Seq[TaskOutput])] = NothingYet
   var jobHashingInitializations: ExpectOne[(BackendJobDescriptor, CallCachingActivity)] = NothingYet

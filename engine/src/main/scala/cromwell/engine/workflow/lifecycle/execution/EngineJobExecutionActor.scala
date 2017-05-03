@@ -278,7 +278,7 @@ class EngineJobExecutionActor(replyTo: ActorRef,
   private def handleReadFromCacheOn(jobDescriptor: BackendJobDescriptor, activity: CallCachingActivity, updatedData: ResponsePendingData) = {
     jobDescriptor.callCachingEligibility match {
         // If the job is eligible, initialize job hashing and go to CheckingCallCache state
-      case CallCachingEligible =>
+      case _: CallCachingEligible =>
         initializeJobHashing(jobDescriptor, activity) match {
           case Success(ejha) => goto(CheckingCallCache) using updatedData.withEJHA(ejha)
           case Failure(failure) => respondAndStop(JobFailedNonRetryableResponse(jobDescriptorKey.jobKey, failure, None))
@@ -294,7 +294,7 @@ class EngineJobExecutionActor(replyTo: ActorRef,
   private def handleReadFromCacheOff(jobDescriptor: BackendJobDescriptor, activity: CallCachingActivity, updatedData: ResponsePendingData) = {
     jobDescriptor.callCachingEligibility match {
         // If the job is eligible, initialize job hashing so it can be written to the cache
-      case CallCachingEligible => initializeJobHashing(jobDescriptor, activity) match {
+      case _: CallCachingEligible => initializeJobHashing(jobDescriptor, activity) match {
         case Failure(failure) => log.error(failure, "Failed to initialize job hashing. The job will not be written to the cache")
         case _ =>
       }

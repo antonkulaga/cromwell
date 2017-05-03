@@ -2,7 +2,7 @@ package cromwell.engine.workflow.lifecycle.execution.preparation
 
 import akka.testkit.{ImplicitSender, TestActorRef}
 import cromwell.core.actor.StreamIntegration.BackPressure
-import cromwell.core.callcaching.{CallCachingEligible, CallCachingIneligible}
+import cromwell.core.callcaching.{CallCachingIneligible, NoDocker}
 import cromwell.core.{LocallyQualifiedName, TestKitSuite}
 import cromwell.docker.DockerHashActor.{DockerHashFailedResponse, DockerHashSuccessResponse}
 import cromwell.docker.{DockerHashRequest, DockerHashResult, DockerImageIdentifier, DockerImageIdentifierWithoutHash}
@@ -47,7 +47,7 @@ class JobPreparationActorSpec extends TestKitSuite("JobPrepActorSpecSystem") wit
     actor ! Start
     expectMsgPF(5 seconds) {
       case success: BackendJobPreparationSucceeded =>
-        success.jobDescriptor.callCachingEligibility shouldBe CallCachingEligible
+        success.jobDescriptor.callCachingEligibility shouldBe NoDocker
     }
     helper.dockerHashingActor.expectNoMsg(1 second)
   }
@@ -63,7 +63,7 @@ class JobPreparationActorSpec extends TestKitSuite("JobPrepActorSpecSystem") wit
     expectMsgPF(5 seconds) {
       case success: BackendJobPreparationSucceeded =>
         success.jobDescriptor.runtimeAttributes("docker").valueString shouldBe dockerValue
-        success.jobDescriptor.callCachingEligibility shouldBe CallCachingEligible
+        success.jobDescriptor.callCachingEligibility shouldBe NoDocker
     }
     helper.dockerHashingActor.expectNoMsg(1 second)
   }

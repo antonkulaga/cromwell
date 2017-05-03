@@ -114,10 +114,13 @@ class JobPreparationActor(executionData: WorkflowExecutionActorData,
 
     def handleDockerValue(value: String) = DockerImageIdentifier.fromString(value) match {
       case Success(dockerImageId: DockerImageIdentifierWithoutHash) if hasDockerDefinition => sendDockerRequest(dockerImageId)
-      case Success(_) =>
-        // If the docker value already has a hash, or the backend doesn't support docker - 
-        // no need to lookup and we're ok for call caching
-        val response = prepareBackendDescriptor(inputs, attributes, CallCachingEligible, kvStoreLookupResults.unscoped)
+      case Success(dockerImageId: DockerImageIdentifierWithoutHash) if !hasDockerDefinition =>
+        // If the backend doesn't support docker - no need to lookup and we're ok for call caching
+        val response = prepareBackendDescriptor(inputs, attributes, NoDocker, kvStoreLookupResults.unscoped)
+        sendResponseAndStop(response)
+      case Success(dockerImageId: DockerImageIdentifierWithHash) =>
+        // If the docker value already has a hash - no need to lookup and we're ok for call caching
+        val response = prepareBackendDescriptor(inputs, attributes, DockerWithHash(dockerImageId.fullName), kvStoreLookupResults.unscoped)
         sendResponseAndStop(response)
       case Failure(failure) => sendFailureAndStop(failure)
     }
@@ -126,16 +129,17 @@ class JobPreparationActor(executionData: WorkflowExecutionActorData,
       case Some(dockerValue) => handleDockerValue(dockerValue.valueString)
       case None =>
         // If there is no docker attribute at all - we're ok for call caching
-        val response = prepareBackendDescriptor(inputs, attributes, CallCachingEligible, kvStoreLookupResults.unscoped)
+        val response = prepareBackendDescriptor(inputs, attributes, NoDocker, kvStoreLookupResults.unscoped)
         sendResponseAndStop(response)
     }
   }
   
   private def handleDockerHashSuccess(dockerHashResult: DockerHashResult, data: JobPreparationHashLookupData) = {
-    val dockerValueWithHash = data.dockerHashRequest.dockerImageID.withHash(dockerHashResult).fullName
-    val newRuntimeAttributes = data.attributes updated (RuntimeAttributesKeys.DockerKey, WdlString(dockerValueWithHash))
+    val tag = data.dockerHashRequest.dockerImageID.fullName
+    val hashValue = data.dockerHashRequest.dockerImageID.withHash(dockerHashResult).fullName
+    val newRuntimeAttributes = data.attributes updated (RuntimeAttributesKeys.DockerKey, WdlString(hashValue))
     // We had to ask for the docker hash, which means the attribute had a floating tag, we're NOT ok for call caching
-    val response = prepareBackendDescriptor(data.inputs, newRuntimeAttributes, FloatingDockerTagWithHash(dockerValueWithHash), data.keyLookupResults.unscoped)
+    val response = prepareBackendDescriptor(data.inputs, newRuntimeAttributes, FloatingDockerTagWithHash(tag, hashValue), data.keyLookupResults.unscoped)
     sendResponseAndStop(response)
   }
 
