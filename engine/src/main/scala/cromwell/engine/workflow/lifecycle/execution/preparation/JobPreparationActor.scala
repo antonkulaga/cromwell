@@ -6,8 +6,9 @@ import cromwell.backend.validation.{DockerValidation, RuntimeAttributesKeys}
 import cromwell.core.Dispatcher.EngineDispatcher
 import cromwell.core.callcaching._
 import cromwell.core.logging.WorkflowLogging
-import cromwell.docker.DockerHashActor.{DockerHashFailureResponse, DockerHashSuccessResponse}
+import cromwell.docker.DockerHashActor.DockerHashSuccessResponse
 import cromwell.docker._
+import cromwell.engine.workflow.WorkflowDockerLookupActor.WorkflowDockerLookupFailure
 import cromwell.engine.workflow.lifecycle.execution.WorkflowExecutionActorData
 import cromwell.engine.workflow.lifecycle.execution.preparation.CallPreparation._
 import cromwell.engine.workflow.lifecycle.execution.preparation.JobPreparationActor.{DockerNoResponseTimeout, _}
@@ -69,11 +70,9 @@ class JobPreparationActor(executionData: WorkflowExecutionActorData,
   when(WaitingForDockerHash) {
     case Event(DockerHashSuccessResponse(dockerHash, _), data: JobPreparationHashLookupData) =>
       handleDockerHashSuccess(dockerHash, data)
-    case Event(failureResponse: DockerHashFailureResponse, data: JobPreparationHashLookupData) =>
-      log.warning(failureResponse.reason)
-      handleDockerHashFailed(failureResponse.reason, data)
-    case Event(DockerNoResponseTimeout(dockerHashRequest), data: JobPreparationHashLookupData) =>
-      handleDockerHashFailed(s"Timed out waiting for a hash for docker image: ${dockerHashRequest.dockerImageID.fullName}", data)
+    case Event(WorkflowDockerLookupFailure(reason, _), data: JobPreparationHashLookupData) =>
+      workflowLogger.warn("Docker lookup failed", reason)
+      handleDockerHashFailed(data)
   }
 
   whenUnhandled {
@@ -143,7 +142,7 @@ class JobPreparationActor(executionData: WorkflowExecutionActorData,
     sendResponseAndStop(response)
   }
 
-  private def handleDockerHashFailed(failure: String, data: JobPreparationHashLookupData) = {
+  private def handleDockerHashFailed(data: JobPreparationHashLookupData) = {
     val response = prepareBackendDescriptor(data.inputs, data.attributes, FloatingDockerTagWithoutHash, data.keyLookupResults.unscoped)
     sendResponseAndStop(response)
   }
