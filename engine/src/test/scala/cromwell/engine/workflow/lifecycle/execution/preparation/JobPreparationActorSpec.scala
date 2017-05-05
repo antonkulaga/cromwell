@@ -4,8 +4,9 @@ import akka.testkit.{ImplicitSender, TestActorRef}
 import cromwell.core.actor.StreamIntegration.BackPressure
 import cromwell.core.callcaching.DockerWithHash
 import cromwell.core.{LocallyQualifiedName, TestKitSuite}
-import cromwell.docker.DockerHashActor.{DockerHashFailedResponse, DockerHashSuccessResponse}
+import cromwell.docker.DockerHashActor.DockerHashSuccessResponse
 import cromwell.docker.{DockerHashRequest, DockerHashResult, DockerImageIdentifier, DockerImageIdentifierWithoutHash}
+import cromwell.engine.workflow.WorkflowDockerLookupActor.WorkflowDockerLookupFailure
 import cromwell.engine.workflow.lifecycle.execution.preparation.CallPreparation.{BackendJobPreparationSucceeded, CallPreparationFailed, Start}
 import cromwell.services.keyvalue.KeyValueServiceActor.{KvGet, KvKeyLookupFailed, KvPair}
 import org.scalatest.{BeforeAndAfter, FlatSpecLike, Matchers}
@@ -63,7 +64,7 @@ class JobPreparationActorSpec extends TestKitSuite("JobPrepActorSpecSystem") wit
     expectMsgPF(5 seconds) {
       case success: BackendJobPreparationSucceeded =>
         success.jobDescriptor.runtimeAttributes("docker").valueString shouldBe dockerValue
-        success.jobDescriptor.dockerWithHash shouldBe None
+        success.jobDescriptor.dockerWithHash shouldBe Some(DockerWithHash("library/ubuntu@sha256:71cd81252a3563a03ad8daee81047b62ab5d892ebbfbf71cf53415f29c130950"))
     }
     helper.dockerHashingActor.expectNoMsg(1 second)
   }
@@ -118,7 +119,7 @@ class JobPreparationActorSpec extends TestKitSuite("JobPrepActorSpecSystem") wit
     expectMsgPF(5 seconds) {
       case success: BackendJobPreparationSucceeded =>
         success.jobDescriptor.runtimeAttributes("docker").valueString shouldBe dockerValue
-        success.jobDescriptor.dockerWithHash shouldBe DockerWithHash(finalValue)
+        success.jobDescriptor.dockerWithHash shouldBe Some(DockerWithHash(finalValue))
     }
   }
 
@@ -132,7 +133,7 @@ class JobPreparationActorSpec extends TestKitSuite("JobPrepActorSpecSystem") wit
     val actor = TestActorRef(helper.buildTestJobPreparationActor(1 minute, 1 minutes, List.empty, inputsAndAttributes, List.empty), self)
     actor ! Start
     helper.dockerHashingActor.expectMsgClass(classOf[DockerHashRequest])
-    helper.dockerHashingActor.reply(DockerHashFailedResponse(new Exception("Failed to get docker hash - part of test flow"), request))
+    helper.dockerHashingActor.reply(WorkflowDockerLookupFailure(new Exception("Failed to get docker hash - part of test flow"), request))
     expectMsgPF(5 seconds) {
       case success: BackendJobPreparationSucceeded =>
         success.jobDescriptor.runtimeAttributes("docker").valueString shouldBe dockerValue
@@ -156,29 +157,5 @@ class JobPreparationActorSpec extends TestKitSuite("JobPrepActorSpecSystem") wit
     // Give a couple of seconds of margin to account for test latency etc...
     helper.dockerHashingActor.expectMsg(backpresureWaitTime.+(2 seconds), request)
   }
-
-  it should "time out if no answer is received from the docker hash actor" in {
-    val dockerValue = "ubuntu:latest"
-    val dockerId = DockerImageIdentifier.fromString(dockerValue).get.asInstanceOf[DockerImageIdentifierWithoutHash]
-    val attributes = Map (
-      "docker" -> WdlString(dockerValue)
-    )
-    val inputsAndAttributes = Success((inputs, attributes))
-    val requestTimeout = 1 second
-    val actor = TestActorRef(helper.buildTestJobPreparationActor(1 minute, requestTimeout, List.empty, inputsAndAttributes, List.empty), self)
-    val request = DockerHashRequest(dockerId)
-    actor ! Start
-    
-    within(10 seconds) {
-      helper.dockerHashingActor.expectMsg(request)
-    }
-
-    expectMsgPF(5 seconds) {
-      case success: BackendJobPreparationSucceeded =>
-        success.jobDescriptor.runtimeAttributes("docker").valueString shouldBe dockerValue
-        success.jobDescriptor.dockerWithHash shouldBe None
-    }
-  }
-  
 }
     

@@ -1,5 +1,6 @@
 package cromwell.engine.workflow.lifecycle.execution.ejea
 
+import cromwell.backend.BackendJobDescriptor
 import cromwell.backend.BackendJobExecutionActor.{AbortedResponse, JobFailedNonRetryableResponse, JobFailedRetryableResponse, JobSucceededResponse}
 import cromwell.core.JobOutput
 import cromwell.core.callcaching._
@@ -46,10 +47,10 @@ private[ejea] trait CanExpectJobStoreWrites extends CanValidateJobStoreKey { sel
 }
 
 private[ejea] trait CanExpectHashingInitialization extends Eventually { self: EngineJobExecutionActorSpec =>
-  def expectHashingActorInitialization(mode: CallCachingMode): Unit = {
+  def expectHashingActorInitialization(mode: CallCachingMode, jobDescriptor: BackendJobDescriptor): Unit = {
     eventually { helper.jobHashingInitializations.hasExactlyOne should be(true) }
     helper.jobHashingInitializations.checkIt { initialization =>
-      initialization._1 should be(helper.backendJobDescriptor)
+      initialization._1 should be(jobDescriptor)
       initialization._2 should be(mode)
     }
   }

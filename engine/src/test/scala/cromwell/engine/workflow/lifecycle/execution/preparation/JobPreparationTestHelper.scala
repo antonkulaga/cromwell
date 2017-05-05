@@ -21,6 +21,7 @@ class JobPreparationTestHelper(implicit val system: ActorSystem) extends Mockito
   val workflowDescriptor = mock[EngineWorkflowDescriptor]
   val backendDescriptor = mock[BackendWorkflowDescriptor]
   workflowDescriptor.backendDescriptor returns backendDescriptor
+  workflowDescriptor.id returns WorkflowId.randomId()
   executionData.workflowDescriptor returns workflowDescriptor
   val jobKey = mock[BackendJobDescriptorKey]
   val serviceRegistryProbe = TestProbe()
