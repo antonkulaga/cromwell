@@ -3,6 +3,7 @@ package cromwell.backend.impl.sfs.config
 import cromwell.backend.impl.sfs.config.ConfigConstants._
 import cromwell.backend.sfs._
 import cromwell.backend.standard.{StandardAsyncExecutionActorParams, StandardAsyncJob}
+import cromwell.backend.validation.DockerValidation
 import cromwell.core.path.Path
 import wdl4s._
 import wdl4s.expression.NoFunctions
@@ -95,13 +96,18 @@ sealed trait ConfigAsyncJobExecutionActor extends SharedFileSystemAsyncJobExecut
     */
   private lazy val runtimeAttributeInputs: WorkflowCoercedInputs = {
     val declarationValidations = configInitializationData.declarationValidations
-    val inputOptions = declarationValidations map { declarationValidation =>
+    val inputOptions = declarationValidations map {
+      case declarationValidation if declarationValidation.key == DockerValidation.instance.key && jobDescriptor.dockerWithHash.isDefined =>
+        Option(declarationValidation.key -> WdlString(jobDescriptor.dockerWithHash.get.dockerAttribute))
+      case declarationValidation =>
       declarationValidation.extractWdlValueOption(validatedRuntimeAttributes) map { wdlValue =>
         declarationValidation.key -> wdlValue
       }
     }
     inputOptions.flatten.toMap
   }
+  
+  override lazy val dockerValueUsed: Option[String] = runtimeAttributeInputs.get(DockerValidation.instance.key).map(_.valueString)
 }
 
 /**

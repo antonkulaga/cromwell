@@ -12,7 +12,6 @@ import cromwell.core._
 import cromwell.core.logging.WorkflowLogging
 import cromwell.engine.backend.{BackendSingletonCollection, CromwellBackends}
 import cromwell.engine.workflow.lifecycle.execution.ExecutionStore.RunnableScopes
-import cromwell.engine.workflow.WorkflowDockerLookupActor
 import cromwell.engine.workflow.lifecycle.execution.WorkflowExecutionActor._
 import cromwell.engine.workflow.lifecycle.{EngineLifecycleActorAbortCommand, EngineLifecycleActorAbortedResponse}
 import cromwell.engine.{ContinueWhilePossible, EngineWorkflowDescriptor}
@@ -37,7 +36,7 @@ case class WorkflowExecutionActor(workflowDescriptor: EngineWorkflowDescriptor,
                                   subWorkflowStoreActor: ActorRef,
                                   callCacheReadActor: ActorRef,
                                   callCacheWriteActor: ActorRef,
-                                  dockerHashActor: ActorRef,
+                                  workflowDockerLookupActor: ActorRef,
                                   jobTokenDispenserActor: ActorRef,
                                   backendSingletonCollection: BackendSingletonCollection,
                                   initializationData: AllBackendInitializationData,
@@ -51,8 +50,6 @@ case class WorkflowExecutionActor(workflowDescriptor: EngineWorkflowDescriptor,
 
   private val tag = s"WorkflowExecutionActor [UUID(${workflowDescriptor.id.shortString})]"
   
-  private val workflowDockerLookupActor = context.actorOf(WorkflowDockerLookupActor.props(workflowDescriptor.id, dockerHashActor, restarting))
-
   private val backendFactories = TryUtil.sequenceMap(workflowDescriptor.backendAssignments.values.toSet[String] map { backendName =>
     backendName -> CromwellBackends.backendLifecycleFactoryActorByName(backendName)
   } toMap) recover {
@@ -93,7 +90,7 @@ case class WorkflowExecutionActor(workflowDescriptor: EngineWorkflowDescriptor,
       
       //Success
         // Job
-    case Event(JobSucceededResponse(jobKey, returnCode, callOutputs, _, _), stateData) =>
+    case Event(JobSucceededResponse(jobKey, returnCode, callOutputs, _, _, _), stateData) =>
       pushSuccessfulCallMetadata(jobKey, returnCode, callOutputs)
       handleCallSuccessful(jobKey, callOutputs, stateData, Map.empty)
         // Sub Workflow
@@ -143,7 +140,7 @@ case class WorkflowExecutionActor(workflowDescriptor: EngineWorkflowDescriptor,
     case Event(SubWorkflowSucceededResponse(subKey, executedKeys, _), stateData) =>
       pushAbortedCallMetadata(subKey)
       handleCallAborted(stateData, subKey, executedKeys)
-    case Event(JobSucceededResponse(jobKey, _, _, _, _), stateData) =>
+    case Event(JobSucceededResponse(jobKey, _, _, _, _, _), stateData) =>
       pushAbortedCallMetadata(jobKey)
       handleCallAborted(stateData, jobKey, Map.empty)
   }
@@ -175,7 +172,7 @@ case class WorkflowExecutionActor(workflowDescriptor: EngineWorkflowDescriptor,
     case Event(JobFailedRetryableResponse(jobKey, reason, returnCode), _) =>
       pushFailedCallMetadata(jobKey, returnCode, reason, retryableFailure = true)
       stay
-    case Event(JobSucceededResponse(jobKey, returnCode, callOutputs, _, _), _) =>
+    case Event(JobSucceededResponse(jobKey, returnCode, callOutputs, _, _, _), _) =>
       pushSuccessfulCallMetadata(jobKey, returnCode, callOutputs)
       stay
   }
@@ -495,7 +492,7 @@ case class WorkflowExecutionActor(workflowDescriptor: EngineWorkflowDescriptor,
   private def processRunnableSubWorkflow(key: SubWorkflowKey, data: WorkflowExecutionActorData): Try[WorkflowExecutionDiff] = {
     val sweaRef = context.actorOf(
       SubWorkflowExecutionActor.props(key, data, backendFactories, ioActor, serviceRegistryActor, jobStoreActor, subWorkflowStoreActor,
-        callCacheReadActor, callCacheWriteActor, dockerHashActor, jobTokenDispenserActor, backendSingletonCollection, initializationData, restarting),
+        callCacheReadActor, callCacheWriteActor, workflowDockerLookupActor, jobTokenDispenserActor, backendSingletonCollection, initializationData, restarting),
       s"SubWorkflowExecutionActor-${key.tag}"
     )
 

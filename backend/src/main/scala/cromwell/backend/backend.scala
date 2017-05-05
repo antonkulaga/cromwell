@@ -2,7 +2,7 @@ package cromwell.backend
 
 import com.typesafe.config.Config
 import cromwell.core.WorkflowOptions.WorkflowOption
-import cromwell.core.callcaching.CallCachingEligibility
+import cromwell.core.callcaching.DockerWithHash
 import cromwell.core.labels.Labels
 import cromwell.core.{CallKey, WorkflowId, WorkflowOptions}
 import cromwell.services.keyvalue.KeyValueServiceActor.KvResponse
@@ -28,7 +28,7 @@ case class BackendJobDescriptor(workflowDescriptor: BackendWorkflowDescriptor,
                                 key: BackendJobDescriptorKey,
                                 runtimeAttributes: Map[LocallyQualifiedName, WdlValue],
                                 inputDeclarations: EvaluatedTaskInputs,
-                                callCachingEligibility: CallCachingEligibility,
+                                dockerWithHash: Option[DockerWithHash],
                                 prefetchedKvStoreEntries: Map[String, KvResponse]) {
   val fullyQualifiedInputs = inputDeclarations map { case (declaration, value) => declaration.fullyQualifiedName -> value }
   val call = key.call

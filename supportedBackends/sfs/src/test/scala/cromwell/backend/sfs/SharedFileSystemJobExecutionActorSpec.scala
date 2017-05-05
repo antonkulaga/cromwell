@@ -12,7 +12,6 @@ import cromwell.backend.sfs.TestLocalAsyncJobExecutionActor._
 import cromwell.backend.standard.StandardValidatedRuntimeAttributesBuilder
 import cromwell.core.Tags._
 import cromwell.core._
-import cromwell.core.callcaching.NoDocker
 import cromwell.core.path.{DefaultPathBuilder, Path}
 import cromwell.services.keyvalue.KeyValueServiceActor._
 import lenthall.exception.AggregatedException
@@ -36,7 +35,7 @@ class SharedFileSystemJobExecutionActorSpec extends TestKitSuite("SharedFileSyst
     val expectedOutputs: CallOutputs = Map(
       "salutation" -> JobOutput(WdlString("Hello you !"))
     )
-    val expectedResponse = JobSucceededResponse(mock[BackendJobDescriptorKey], Some(0), expectedOutputs, None, Seq.empty)
+    val expectedResponse = JobSucceededResponse(mock[BackendJobDescriptorKey], Some(0), expectedOutputs, None, Seq.empty, None)
     val runtime = if (docker) """runtime { docker: "ubuntu:latest" }""" else ""
     val workflowDescriptor = buildWorkflowDescriptor(HelloWorld, runtime = runtime)
     val workflow = TestWorkflow(workflowDescriptor, TestConfig.backendRuntimeConfigDescriptor, expectedResponse)
@@ -111,7 +110,7 @@ class SharedFileSystemJobExecutionActorSpec extends TestKitSuite("SharedFileSyst
       val workflowDescriptor = buildWorkflowDescriptor(InputFiles, inputs, runtime = runtime)
       val backend = createBackend(jobDescriptorFromSingleCallWorkflow(workflowDescriptor, inputs, WorkflowOptions.empty, runtimeAttributeDefinitions), conf)
       val jobDescriptor: BackendJobDescriptor = jobDescriptorFromSingleCallWorkflow(workflowDescriptor, inputs, WorkflowOptions.empty, runtimeAttributeDefinitions)
-      val expectedResponse = JobSucceededResponse(jobDescriptor.key, Some(0), expectedOutputs, None, Seq.empty)
+      val expectedResponse = JobSucceededResponse(jobDescriptor.key, Some(0), expectedOutputs, None, Seq.empty, None)
 
       val jobPaths = JobPathsWithDocker(jobDescriptor.key, workflowDescriptor, conf.backendConfig)
 
@@ -236,10 +235,10 @@ class SharedFileSystemJobExecutionActorSpec extends TestKitSuite("SharedFileSyst
       val runtimeAttributes = RuntimeAttributeDefinition.addDefaultsToAttributes(runtimeAttributeDefinitions, WorkflowOptions.empty)(call.task.runtimeAttributes.attrs)
 
       val jobDescriptor: BackendJobDescriptor =
-        BackendJobDescriptor(workflowDescriptor, BackendJobDescriptorKey(call, Option(shard), 1), runtimeAttributes, fqnMapToDeclarationMap(symbolMaps), NoDocker, Map.empty)
+        BackendJobDescriptor(workflowDescriptor, BackendJobDescriptorKey(call, Option(shard), 1), runtimeAttributes, fqnMapToDeclarationMap(symbolMaps), None, Map.empty)
       val backend = createBackend(jobDescriptor, TestConfig.backendRuntimeConfigDescriptor)
       val response =
-        JobSucceededResponse(mock[BackendJobDescriptorKey], Some(0), Map("out" -> JobOutput(WdlInteger(shard))), None, Seq.empty)
+        JobSucceededResponse(mock[BackendJobDescriptorKey], Some(0), Map("out" -> JobOutput(WdlInteger(shard))), None, Seq.empty, None)
       executeJobAndAssertOutputs(backend, response)
     }
   }
@@ -260,7 +259,7 @@ class SharedFileSystemJobExecutionActorSpec extends TestKitSuite("SharedFileSyst
       "o2" -> JobOutput(WdlArray(WdlArrayType(WdlFileType), Seq(expectedA, expectedB))),
       "o3" -> JobOutput(WdlFile(inputFile))
     )
-    val expectedResponse = JobSucceededResponse(jobDescriptor.key, Some(0), expectedOutputs, None, Seq.empty)
+    val expectedResponse = JobSucceededResponse(jobDescriptor.key, Some(0), expectedOutputs, None, Seq.empty, None)
 
     executeJobAndAssertOutputs(backend, expectedResponse)
   }

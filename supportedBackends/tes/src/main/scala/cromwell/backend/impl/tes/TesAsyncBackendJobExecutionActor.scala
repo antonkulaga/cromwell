@@ -58,6 +58,8 @@ class TesAsyncBackendJobExecutionActor(override val standardParams: StandardAsyn
     maxInterval = 30 seconds,
     multiplier = 1.1
   )
+  
+  override lazy val dockerValueUsed = Option(runtimeAttributes.dockerImage)
 
   private val tesEndpoint = workflowDescriptor.workflowOptions.getOrElse("endpoint", tesConfiguration.endpointURL)
 

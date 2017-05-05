@@ -5,7 +5,7 @@ sealed trait CallCachingEligible extends CallCachingEligibility
 sealed trait CallCachingIneligible extends CallCachingEligibility {
   def message: String
 }
-  
+
 case object NoDocker extends CallCachingEligible
 case class DockerWithHash(dockerAttribute: String) extends CallCachingEligible
 case class FloatingDockerTagWithHash(dockerAttributeWithTag: String, dockerAttributeWithHash: String) extends CallCachingEligible

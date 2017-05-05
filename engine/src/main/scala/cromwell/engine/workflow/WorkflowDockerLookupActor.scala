@@ -113,6 +113,7 @@ class WorkflowDockerLookupActor(workflowId: WorkflowId, val dockerHashingActor: 
           allRequests foreach { request =>
             request.replyTo ! WorkflowDockerLookupFailure(FailModeException, request.dockerHashRequest)
           }
+        case _ =>
       }
   }
 

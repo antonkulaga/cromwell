@@ -77,7 +77,7 @@ private[ejea] trait CanExpectCacheInvalidation extends Eventually { self: Engine
 private[ejea] trait HasJobSuccessResponse { self: EngineJobExecutionActorSpec =>
   val successRc = Option(171)
   val successOutputs = Map("a" -> JobOutput(WdlInteger(3)), "b" -> JobOutput(WdlString("bee")))
-  def successResponse = JobSucceededResponse(helper.jobDescriptorKey, successRc, successOutputs, None, Seq.empty)
+  def successResponse = JobSucceededResponse(helper.jobDescriptorKey, successRc, successOutputs, None, Seq.empty, None)
 }
 private[ejea] object HasJobSuccessResponse {
   val SuccessfulCallCacheHashes = CallCacheHashes(
