@@ -65,7 +65,7 @@ private[preparation] class TestJobPreparationActor(kvStoreKeysForPrefetch: List[
                                                    scopedKeyMaker: ScopedKeyMaker) extends JobPreparationActor(executionData = executionData,
                                                                                                   jobKey = jobKey,
                                                                                                   factory = null,
-                                                                                                  dockerHashingActor = dockerHashingActor,
+                                                                                                  workflowDockerLookupActor = dockerHashingActor,
                                                                                                   initializationData = None,
                                                                                                   serviceRegistryActor = serviceRegistryActor,
                                                                                                   ioActor = ioActor,
@@ -77,7 +77,6 @@ private[preparation] class TestJobPreparationActor(kvStoreKeysForPrefetch: List[
   override private[preparation] lazy val dockerHashCredentials = dockerHashCredentialsInput
   override private[preparation] lazy val noResponseTimeout = dockerNoResponseTimeoutInput
   override private[preparation] lazy val hasDockerDefinition = true
-  override protected def backpressureTimeout: FiniteDuration = backpressureWaitTimeInput
 
   override def scopedKey(key: String) = scopedKeyMaker.apply(key)
   override def evaluateInputsAndAttributes = inputsAndAttributes

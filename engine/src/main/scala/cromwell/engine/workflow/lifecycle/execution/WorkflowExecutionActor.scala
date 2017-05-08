@@ -474,8 +474,9 @@ case class WorkflowExecutionActor(workflowDescriptor: EngineWorkflowDescriptor,
             val ejeaName = s"${workflowDescriptor.id}-EngineJobExecutionActor-${jobKey.tag}"
             val backendSingleton = backendSingletonCollection.backendSingletonActors(backendName)
             val ejeaProps = EngineJobExecutionActor.props(
-              self, jobKey, data, factory, initializationData.get(backendName), restarting, serviceRegistryActor, ioActor,
-              jobStoreActor, callCacheReadActor, callCacheWriteActor, workflowDockerLookupActor, jobTokenDispenserActor, backendSingleton, backendName, workflowDescriptor.callCachingMode)
+              self, jobKey, data, factory, initializationData.get(backendName), restarting, serviceRegistryActor = serviceRegistryActor,
+              ioActor = ioActor, jobStoreActor = jobStoreActor, callCacheReadActor = callCacheReadActor, callCacheWriteActor = callCacheWriteActor,
+              workflowDockerLookupActor = workflowDockerLookupActor, jobTokenDispenserActor = jobTokenDispenserActor, backendSingleton, backendName, workflowDescriptor.callCachingMode)
             val ejeaRef = context.actorOf(ejeaProps, ejeaName)
             context watch ejeaRef
             pushNewCallMetadata(jobKey, Option(backendName))
@@ -772,13 +773,15 @@ object WorkflowExecutionActor {
             subWorkflowStoreActor: ActorRef,
             callCacheReadActor: ActorRef,
             callCacheWriteActor: ActorRef,
-            dockerHashActor: ActorRef,
+            workflowDockerLookupActor: ActorRef,
             jobTokenDispenserActor: ActorRef,
             backendSingletonCollection: BackendSingletonCollection,
             initializationData: AllBackendInitializationData,
             restarting: Boolean): Props = {
-    Props(WorkflowExecutionActor(workflowDescriptor, ioActor, serviceRegistryActor, jobStoreActor, subWorkflowStoreActor,
-      callCacheReadActor, callCacheWriteActor, dockerHashActor, jobTokenDispenserActor, backendSingletonCollection, initializationData, restarting)).withDispatcher(EngineDispatcher)
+    Props(WorkflowExecutionActor(workflowDescriptor, ioActor = ioActor, serviceRegistryActor = serviceRegistryActor, jobStoreActor = jobStoreActor,
+      subWorkflowStoreActor = subWorkflowStoreActor, callCacheReadActor = callCacheReadActor, callCacheWriteActor = callCacheWriteActor,
+      workflowDockerLookupActor = workflowDockerLookupActor, jobTokenDispenserActor = jobTokenDispenserActor, backendSingletonCollection,
+      initializationData, restarting)).withDispatcher(EngineDispatcher)
   }
 
   implicit class EnhancedWorkflowOutputs(val outputs: Map[LocallyQualifiedName, WdlValue]) extends AnyVal {

@@ -11,7 +11,7 @@ import cromwell.docker._
 import cromwell.engine.workflow.WorkflowDockerLookupActor.WorkflowDockerLookupFailure
 import cromwell.engine.workflow.lifecycle.execution.WorkflowExecutionActorData
 import cromwell.engine.workflow.lifecycle.execution.preparation.CallPreparation._
-import cromwell.engine.workflow.lifecycle.execution.preparation.JobPreparationActor.{DockerNoResponseTimeout, _}
+import cromwell.engine.workflow.lifecycle.execution.preparation.JobPreparationActor._
 import cromwell.services.keyvalue.KeyValueServiceActor.{KvGet, KvJobKey, KvResponse, ScopedKey}
 import wdl4s._
 import wdl4s.values.WdlValue
@@ -23,19 +23,14 @@ import scala.util.{Failure, Success, Try}
 class JobPreparationActor(executionData: WorkflowExecutionActorData,
                           jobKey: BackendJobDescriptorKey,
                           factory: BackendLifecycleActorFactory,
-                          val dockerHashingActor: ActorRef,
+                          val workflowDockerLookupActor: ActorRef,
                           initializationData: Option[BackendInitializationData],
                           serviceRegistryActor: ActorRef,
                           ioActor: ActorRef,
                           backendSingletonActor: Option[ActorRef])
-  extends FSM[JobPreparationActorState, JobPreparationActorData] with WorkflowLogging with DockerClientHelper {
+  extends FSM[JobPreparationActorState, JobPreparationActorData] with WorkflowLogging {
 
   override lazy val workflowIdForLogging = workflowDescriptor.id
-
-  // Amount of time after which the docker request should be considered lost and sent agagin
-  override protected def backpressureTimeout: FiniteDuration = 10 seconds
-  // Amount of time to wait when we get a Backpressure response before sending the request again
-  override protected def backpressureRandomizerFactor: Double = 0.5D
 
   private[preparation] lazy val noResponseTimeout: FiniteDuration = 3 minutes
   
@@ -46,8 +41,6 @@ class JobPreparationActor(executionData: WorkflowExecutionActorData,
   private[preparation] lazy val hasDockerDefinition = runtimeAttributeDefinitions.exists(_.name == DockerValidation.instance.key)
 
   startWith(Idle, JobPreparationActorNoData)
-
-  context.become(dockerReceive orElse receive)
 
   when(Idle) {
     case Event(Start, JobPreparationActorNoData) =>
@@ -107,13 +100,13 @@ class JobPreparationActor(executionData: WorkflowExecutionActorData,
     def sendDockerRequest(dockerImageId: DockerImageIdentifierWithoutHash) = {
       val dockerHashRequest = DockerHashRequest(dockerImageId, dockerHashCredentials)
       val newData = JobPreparationHashLookupData(kvStoreLookupResults, dockerHashRequest, inputs, attributes)
-      sendDockerCommand(dockerHashRequest, noResponseTimeout)
+      workflowDockerLookupActor ! dockerHashRequest
       goto(WaitingForDockerHash) using newData
     }
 
     def handleDockerValue(value: String) = DockerImageIdentifier.fromString(value) match {
       case Success(dockerImageId: DockerImageIdentifierWithoutHash) if hasDockerDefinition => sendDockerRequest(dockerImageId)
-      case Success(dockerImageId: DockerImageIdentifierWithoutHash) if !hasDockerDefinition =>
+      case Success(_: DockerImageIdentifierWithoutHash) if !hasDockerDefinition =>
         // If the backend doesn't support docker - no need to lookup and we're ok for call caching
         val response = prepareBackendDescriptor(inputs, attributes, None, kvStoreLookupResults.unscoped)
         sendResponseAndStop(response)
@@ -178,13 +171,6 @@ class JobPreparationActor(executionData: WorkflowExecutionActorData,
       evaluatedRuntimeAttributes <- evaluateRuntimeAttributes(unevaluatedRuntimeAttributes, expressionLanguageFunctions, inputEvaluation)
     } yield curriedAddDefaultsToAttributes(evaluatedRuntimeAttributes)
   }
-
-  override protected def onTimeout(message: Any, to: ActorRef): Unit = {
-    message match {
-      case request: DockerHashRequest => self ! DockerNoResponseTimeout(request)
-      case other => log.warning(s"Unknown request $other timed out")
-    }
-  }
 }
 
 object JobPreparationActor {
@@ -207,7 +193,7 @@ object JobPreparationActor {
   def props(executionData: WorkflowExecutionActorData,
             jobKey: BackendJobDescriptorKey,
             factory: BackendLifecycleActorFactory,
-            dockerHashingActor: ActorRef,
+            workflowDockerLookupActor: ActorRef,
             initializationData: Option[BackendInitializationData],
             serviceRegistryActor: ActorRef,
             ioActor: ActorRef,
@@ -217,10 +203,10 @@ object JobPreparationActor {
     Props(new JobPreparationActor(executionData,
       jobKey,
       factory,
-      dockerHashingActor,
+      workflowDockerLookupActor = workflowDockerLookupActor,
       initializationData,
-      serviceRegistryActor,
-      ioActor,
-      backendSingletonActor)).withDispatcher(EngineDispatcher)
+      serviceRegistryActor = serviceRegistryActor,
+      ioActor = ioActor,
+      backendSingletonActor = backendSingletonActor)).withDispatcher(EngineDispatcher)
   }
 }

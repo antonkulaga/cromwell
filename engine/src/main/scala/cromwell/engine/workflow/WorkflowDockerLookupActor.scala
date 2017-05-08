@@ -5,11 +5,14 @@ import cromwell.core.{Dispatcher, WorkflowId}
 import cromwell.database.sql.tables.DockerHashStoreEntry
 import cromwell.docker.DockerHashActor.{DockerHashFailureResponse, DockerHashSuccessResponse}
 import cromwell.docker.{DockerClientHelper, DockerHashRequest, DockerHashResult, DockerImageIdentifier}
+import cromwell.engine.workflow.WorkflowActor.{RestartExistingWorkflow, StartMode}
 import cromwell.engine.workflow.WorkflowDockerLookupActor._
 import cromwell.services.SingletonServicesStore
 import lenthall.util.TryUtil
 
 import scala.collection.immutable.Queue
+import scala.concurrent.duration.{FiniteDuration, _}
+import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -29,10 +32,19 @@ import scala.util.{Failure, Success, Try}
   * 3-4) Return lookup failure for current request and all subsequent requests for the same tag
   */
 
-class WorkflowDockerLookupActor(workflowId: WorkflowId, val dockerHashingActor: ActorRef, restart: Boolean)
+class WorkflowDockerLookupActor(workflowId: WorkflowId, val dockerHashingActor: ActorRef, startMode: StartMode)
   extends LoggingFSM[WorkflowDockerLookupActorState, WorkflowDockerLookupActorData] with DockerClientHelper with SingletonServicesStore {
 
   implicit val ec = context.system.dispatchers.lookup(Dispatcher.EngineDispatcher)
+
+  // Amount of time after which the docker request should be considered lost and sent again
+  override protected def backpressureTimeout: FiniteDuration = 10 seconds
+  // Amount of time to wait when we get a Backpressure response before sending the request again
+  override protected def backpressureRandomizerFactor: Double = 0.5D
+
+  private val restart = startMode == RestartExistingWorkflow
+
+  context.become(dockerReceive orElse receive)
 
   if (restart) {
     startWith(LoadingCache, WorkflowDockerLookupActorData.empty)
@@ -206,8 +218,8 @@ object WorkflowDockerLookupActor {
   /* Responses */
   final case class WorkflowDockerLookupFailure(reason: Throwable, request: DockerHashRequest)
   
-  def props(workflowId: WorkflowId, dockerHashingActor: ActorRef, restart: Boolean) = {
-    Props(new WorkflowDockerLookupActor(workflowId, dockerHashingActor, restart))
+  def props(workflowId: WorkflowId, dockerHashingActor: ActorRef, startMode: StartMode) = {
+    Props(new WorkflowDockerLookupActor(workflowId, dockerHashingActor, startMode))
   }
 
   /* Data */

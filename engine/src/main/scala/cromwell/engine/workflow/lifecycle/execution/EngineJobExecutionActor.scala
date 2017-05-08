@@ -40,7 +40,7 @@ class EngineJobExecutionActor(replyTo: ActorRef,
                               jobStoreActor: ActorRef,
                               callCacheReadActor: ActorRef,
                               callCacheWriteActor: ActorRef,
-                              dockerHashActor: ActorRef,
+                              workflowDockerLookupActor: ActorRef,
                               jobTokenDispenserActor: ActorRef,
                               backendSingletonActor: Option[ActorRef],
                               backendName: String,
@@ -232,7 +232,7 @@ class EngineJobExecutionActor(replyTo: ActorRef,
       disableCallCaching(Option(t))
       stay using data.copy(hashes = Option(Failure(t)))
 
-      //FIXME: Do something with "usedDockerValue" in the response: 
+      //FIXME: Do something with "usedDockerValue" in the response:
       // update the hashes if we have them and the value used is effectively a docker hash
       // Don't write anything if the value used is a tag...
     case Event(response: JobSucceededResponse, data @ ResponsePendingData(_, _, Some(Success(hashes)), _, _)) if effectiveCallCachingMode.writeToCache =>
@@ -277,7 +277,7 @@ class EngineJobExecutionActor(replyTo: ActorRef,
       log.error("Bad message from {} to EngineJobExecutionActor in state {}(with data {}): {}", sender, stateName, stateData, msg)
       stay
   }
-  
+
   private def handleReadFromCacheOn(jobDescriptor: BackendJobDescriptor, activity: CallCachingActivity, updatedData: ResponsePendingData) = {
     jobDescriptor.dockerWithHash match {
         // If the job is eligible, initialize job hashing and go to CheckingCallCache state
@@ -355,7 +355,8 @@ class EngineJobExecutionActor(replyTo: ActorRef,
   def createJobPreparationActor(jobPrepProps: Props, name: String): ActorRef = context.actorOf(jobPrepProps, name)
   def prepareJob() = {
     val jobPreparationActorName = s"BackendPreparationActor_for_$jobTag"
-    val jobPrepProps = JobPreparationActor.props(executionData, jobDescriptorKey, factory, dockerHashActor, initializationData, serviceRegistryActor, ioActor, backendSingletonActor)
+    val jobPrepProps = JobPreparationActor.props(executionData, jobDescriptorKey, factory, workflowDockerLookupActor = workflowDockerLookupActor,
+      initializationData, serviceRegistryActor = serviceRegistryActor, ioActor = ioActor, backendSingletonActor = backendSingletonActor)
     val jobPreparationActor = createJobPreparationActor(jobPrepProps, jobPreparationActorName)
     jobPreparationActor ! CallPreparation.Start
     goto(PreparingJob)
@@ -377,9 +378,10 @@ class EngineJobExecutionActor(replyTo: ActorRef,
           factory.runtimeAttributeDefinitions(initializationData),
           backendName,
           activity,
-          dockerWithHash)
+          dockerWithHash
+        )
         val ejha = context.actorOf(props, s"ejha_for_$jobDescriptor")
-        
+
         Success(ejha)
       case None => Failure(new IllegalStateException("Tried to initialize job hashing without a file hashing actor !"))
     }
@@ -424,7 +426,7 @@ class EngineJobExecutionActor(replyTo: ActorRef,
     def updateMetadataForInvalidatedEntry(entry: CallCachingEntry) = {
       import cromwell.core.ExecutionIndex._
       import cromwell.services.metadata.MetadataService.implicits.MetadataAutoPutter
-      
+
       val workflowId = WorkflowId.fromString(entry.workflowExecutionUuid)
       // If the entry doesn't have an attempt, it means that this cache entry was added before this change
       // and we don't know which attempt yielded this cache entry
@@ -432,7 +434,7 @@ class EngineJobExecutionActor(replyTo: ActorRef,
       val key = Option((entry.callFullyQualifiedName, entry.jobIndex.toIndex, entry.jobAttempt.getOrElse(1)))
       serviceRegistryActor.putMetadataWithRawKey(workflowId, key, Map(callCachingAllowReuseMetadataKey -> false))
     }
-    
+
     response match {
       case CallCacheInvalidatedFailure(failure) => log.error(failure, "Failed to invalidate cache entry for job: {}", jobDescriptorKey)
       case CallCacheInvalidatedSuccess(Some(entry)) => updateMetadataForInvalidatedEntry(entry)
@@ -552,7 +554,7 @@ object EngineJobExecutionActor {
             jobStoreActor: ActorRef,
             callCacheReadActor: ActorRef,
             callCacheWriteActor: ActorRef,
-            dockerHashActor: ActorRef,
+            workflowDockerLookupActor: ActorRef,
             jobTokenDispenserActor: ActorRef,
             backendSingletonActor: Option[ActorRef],
             backendName: String,
@@ -569,7 +571,7 @@ object EngineJobExecutionActor {
       jobStoreActor = jobStoreActor,
       callCacheReadActor = callCacheReadActor,
       callCacheWriteActor = callCacheWriteActor,
-      dockerHashActor = dockerHashActor,
+      workflowDockerLookupActor = workflowDockerLookupActor,
       jobTokenDispenserActor = jobTokenDispenserActor,
       backendSingletonActor = backendSingletonActor,
       backendName = backendName: String,
