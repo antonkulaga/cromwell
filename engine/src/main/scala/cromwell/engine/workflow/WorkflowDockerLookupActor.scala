@@ -81,7 +81,9 @@ class WorkflowDockerLookupActor(workflowId: WorkflowId, val dockerHashingActor: 
   // Waiting for a mapping to be written to the database
   when(WaitingForDockerHashStore) {
     case Event(DockerHashStoreSuccess(result), data: WorkflowDockerLookupActorDataWithRequest) =>
-      replyAndCheckForWork(result, data)
+      // Add the new label to hash mapping to the current set of mappings.
+      val newData = data.withNewMapping(data.currentRequest.dockerHashRequest, result.dockerHash)
+      replyAndCheckForWork(result, newData)
     case Event(DockerHashStoreFailure(reason), data: WorkflowDockerLookupActorDataWithRequest) =>
       val dockerRequest = data.currentRequest.dockerHashRequest
       replyAndCheckForWork(WorkflowDockerLookupFailure(reason, dockerRequest), data.withFailureMapping(dockerRequest, reason.getMessage))
