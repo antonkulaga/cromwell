@@ -160,10 +160,10 @@ class JobPreparationActor(executionData: WorkflowExecutionActorData,
                                              ioActor: ActorRef,
                                              backendSingletonActor: Option[ActorRef]) = factory.jobExecutionActorProps(jobDescriptor, initializationData, serviceRegistryActor, ioActor, backendSingletonActor)
 
-  private [preparation] def prepareBackendDescriptor(inputEvaluation: Map[Declaration, WdlValue],
-                               runtimeAttributes: Map[LocallyQualifiedName, WdlValue],
-                                                     dockerHash: Option[DockerImageIdentifierWithHash],
-                               prefetchedJobStoreEntries: Map[String, KvResponse]): BackendJobPreparationSucceeded = {
+  private[preparation] def prepareBackendDescriptor(inputEvaluation: Map[Declaration, WdlValue],
+                                                    runtimeAttributes: Map[LocallyQualifiedName, WdlValue],
+                                                    dockerHash: Option[DockerImageIdentifierWithHash],
+                                                    prefetchedJobStoreEntries: Map[String, KvResponse]): BackendJobPreparationSucceeded = {
     val dockerWithHash = dockerHash map { dockerId => DockerWithHash(dockerId.fullName) }
     val jobDescriptor = BackendJobDescriptor(workflowDescriptor.backendDescriptor, jobKey, runtimeAttributes, inputEvaluation, dockerWithHash, prefetchedJobStoreEntries)
     BackendJobPreparationSucceeded(jobDescriptor, jobExecutionProps(jobDescriptor, initializationData, serviceRegistryActor, ioActor, backendSingletonActor))

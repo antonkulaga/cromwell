@@ -18,7 +18,9 @@ trait DockerHashStoreSlickDatabase extends DockerHashStoreSqlDatabase {
     */
   override def addDockerHashStoreEntries(dockerHashStoreEntries: Iterable[DockerHashStoreEntry])
                                (implicit ec: ExecutionContext): Future[Unit] = {
-    val action = dataAccess.dockerHashStoreEntryIdsAutoInc ++= dockerHashStoreEntries
+    // This will do a batch insert but we're currently not limiting the batch size.  That's probably ok given the
+    // scale of this particular case.
+    val action = dataAccess.dockerHashStoreEntries ++= dockerHashStoreEntries
     runTransaction(action) void
   }
 
@@ -28,10 +30,7 @@ trait DockerHashStoreSlickDatabase extends DockerHashStoreSqlDatabase {
     */
   override def queryDockerHashStoreEntries(workflowExecutionUuid: String)
                                           (implicit ec: ExecutionContext): Future[Seq[DockerHashStoreEntry]] = {
-    val action = for {
-      dockerHashEntries <- dataAccess.dockerHashStoreEntriesForWorkflowExecutionUuid(workflowExecutionUuid).result
-    } yield dockerHashEntries
-    
+    val action = dataAccess.dockerHashStoreEntriesForWorkflowExecutionUuid(workflowExecutionUuid).result
     runTransaction(action)
   }
 

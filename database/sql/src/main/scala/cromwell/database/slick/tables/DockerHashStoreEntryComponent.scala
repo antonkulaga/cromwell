@@ -22,7 +22,7 @@ trait DockerHashStoreEntryComponent {
     def ucDockerHashStoreEntryWeuDt = index("UC_DOCKER_HASH_STORE_ENTRY_WEU_DT", (workflowExecutionUuid, dockerTag), unique = true)
   }
 
-  protected val dockerHashStoreEntries = TableQuery[DockerHashStoreEntries]
+  val dockerHashStoreEntries = TableQuery[DockerHashStoreEntries]
 
   val dockerHashStoreEntryIdsAutoInc = dockerHashStoreEntries returning dockerHashStoreEntries.map(_.dockerHashStoreEntryId)
 

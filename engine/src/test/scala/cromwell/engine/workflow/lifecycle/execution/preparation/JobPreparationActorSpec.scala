@@ -123,7 +123,7 @@ class JobPreparationActorSpec extends TestKitSuite("JobPrepActorSpecSystem") wit
     }
   }
 
-  it should "not provide a DockerWithHash value if it can't get the doker hash" in {
+  it should "not provide a DockerWithHash value if it can't get the docker hash" in {
     val dockerValue = "ubuntu:latest"
     val request = DockerHashRequest(DockerImageIdentifier.fromString(dockerValue).get.asInstanceOf[DockerImageIdentifierWithoutHash])
     val attributes = Map (

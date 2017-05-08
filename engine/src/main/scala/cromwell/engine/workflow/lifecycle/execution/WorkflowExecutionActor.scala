@@ -49,7 +49,7 @@ case class WorkflowExecutionActor(workflowDescriptor: EngineWorkflowDescriptor,
   override val workflowIdForCallMetadata = workflowDescriptor.id
 
   private val tag = s"WorkflowExecutionActor [UUID(${workflowDescriptor.id.shortString})]"
-  
+
   private val backendFactories = TryUtil.sequenceMap(workflowDescriptor.backendAssignments.values.toSet[String] map { backendName =>
     backendName -> CromwellBackends.backendLifecycleFactoryActorByName(backendName)
   } toMap) recover {
