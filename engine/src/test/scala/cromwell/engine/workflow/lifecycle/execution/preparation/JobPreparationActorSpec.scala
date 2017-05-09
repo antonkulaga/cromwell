@@ -1,7 +1,6 @@
 package cromwell.engine.workflow.lifecycle.execution.preparation
 
 import akka.testkit.{ImplicitSender, TestActorRef}
-import cromwell.core.actor.StreamIntegration.BackPressure
 import cromwell.core.callcaching.DockerWithHash
 import cromwell.core.{LocallyQualifiedName, TestKitSuite}
 import cromwell.docker.DockerHashActor.DockerHashSuccessResponse
@@ -139,23 +138,6 @@ class JobPreparationActorSpec extends TestKitSuite("JobPrepActorSpecSystem") wit
         success.jobDescriptor.runtimeAttributes("docker").valueString shouldBe dockerValue
         success.jobDescriptor.dockerWithHash shouldBe None
     }
-  }
-  
-  it should "wait and resubmit the docker request when it gets a backpressure message" in {
-    val dockerValue = "ubuntu:latest"
-    val dockerId = DockerImageIdentifier.fromString(dockerValue).get.asInstanceOf[DockerImageIdentifierWithoutHash]
-    val attributes = Map (
-      "docker" -> WdlString(dockerValue)
-    )
-    val inputsAndAttributes = Success((inputs, attributes))
-    val backpresureWaitTime = 2 seconds
-    val actor = TestActorRef(helper.buildTestJobPreparationActor(backpresureWaitTime, 1 minute, List.empty, inputsAndAttributes, List.empty), self)
-    val request = DockerHashRequest(dockerId)
-    actor ! Start
-    helper.dockerHashingActor.expectMsg(request)
-    helper.dockerHashingActor.reply(BackPressure(request))
-    // Give a couple of seconds of margin to account for test latency etc...
-    helper.dockerHashingActor.expectMsg(backpresureWaitTime.+(2 seconds), request)
   }
 }
     

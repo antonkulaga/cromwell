@@ -188,8 +188,6 @@ object JobPreparationActor {
   case object WaitingForDockerHash extends JobPreparationActorState
   case object FetchingKeyValueStoreEntries extends JobPreparationActorState
   
-  private case class DockerNoResponseTimeout(dockerHashRequest: DockerHashRequest)
-  
   def props(executionData: WorkflowExecutionActorData,
             jobKey: BackendJobDescriptorKey,
             factory: BackendLifecycleActorFactory,
