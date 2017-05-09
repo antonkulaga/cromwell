@@ -492,9 +492,10 @@ case class WorkflowExecutionActor(workflowDescriptor: EngineWorkflowDescriptor,
   
   private def processRunnableSubWorkflow(key: SubWorkflowKey, data: WorkflowExecutionActorData): Try[WorkflowExecutionDiff] = {
     val sweaRef = context.actorOf(
-      SubWorkflowExecutionActor.props(key, data, backendFactories, ioActor, serviceRegistryActor, jobStoreActor, subWorkflowStoreActor,
-        callCacheReadActor, callCacheWriteActor, workflowDockerLookupActor, jobTokenDispenserActor, backendSingletonCollection, initializationData, restarting),
-      s"SubWorkflowExecutionActor-${key.tag}"
+      SubWorkflowExecutionActor.props(key, data, backendFactories, ioActor = ioActor, serviceRegistryActor = serviceRegistryActor, jobStoreActor = jobStoreActor,
+        subWorkflowStoreActor = subWorkflowStoreActor, callCacheReadActor = callCacheReadActor, callCacheWriteActor = callCacheWriteActor,
+        workflowDockerLookupActor = workflowDockerLookupActor, jobTokenDispenserActor = jobTokenDispenserActor, backendSingletonCollection, initializationData,
+        restarting), s"SubWorkflowExecutionActor-${key.tag}"
     )
 
     context watch sweaRef
