@@ -37,7 +37,7 @@ class JobPreparationActorSpec extends TestKitSuite("JobPrepActorSpecSystem") wit
     val actor = TestActorRef(helper.buildTestJobPreparationActor(null, null, null, failure, List.empty), self)
     actor ! Start
     expectMsg(expectedResponse)
-    helper.dockerHashingActor.expectNoMsg(100 millis)
+    helper.workflowDockerLookupActor.expectNoMsg(100 millis)
   }
 
   it should "prepare successfully a job without docker attribute" in {
@@ -49,7 +49,7 @@ class JobPreparationActorSpec extends TestKitSuite("JobPrepActorSpecSystem") wit
       case success: BackendJobPreparationSucceeded =>
         success.jobDescriptor.dockerWithHash shouldBe None
     }
-    helper.dockerHashingActor.expectNoMsg(1 second)
+    helper.workflowDockerLookupActor.expectNoMsg(1 second)
   }
 
   it should "not ask for the docker hash if the attribute already contains a hash" in {
@@ -65,7 +65,7 @@ class JobPreparationActorSpec extends TestKitSuite("JobPrepActorSpecSystem") wit
         success.jobDescriptor.runtimeAttributes("docker").valueString shouldBe dockerValue
         success.jobDescriptor.dockerWithHash shouldBe Some(DockerWithHash("library/ubuntu@sha256:71cd81252a3563a03ad8daee81047b62ab5d892ebbfbf71cf53415f29c130950"))
     }
-    helper.dockerHashingActor.expectNoMsg(1 second)
+    helper.workflowDockerLookupActor.expectNoMsg(1 second)
   }
 
   it should "lookup any requested key/value prefetches before (not) performing a docker hash lookup" in {
@@ -92,11 +92,11 @@ class JobPreparationActorSpec extends TestKitSuite("JobPrepActorSpecSystem") wit
       }
     }
     respondFromKv()
-    helper.dockerHashingActor.expectNoMsg(max = 100 milliseconds)
+    helper.workflowDockerLookupActor.expectNoMsg(max = 100 milliseconds)
     respondFromKv()
 
-    val req = helper.dockerHashingActor.expectMsgClass(classOf[DockerHashRequest])
-    helper.dockerHashingActor.reply(DockerHashSuccessResponse(hashResult, req))
+    val req = helper.workflowDockerLookupActor.expectMsgClass(classOf[DockerHashRequest])
+    helper.workflowDockerLookupActor.reply(DockerHashSuccessResponse(hashResult, req))
     expectMsgPF(5 seconds) {
       case success: BackendJobPreparationSucceeded =>
         success.jobDescriptor.prefetchedKvStoreEntries should be(Map(prefetchedKey1 -> prefetchedVal1, prefetchedKey2 -> prefetchedVal2))
@@ -113,8 +113,8 @@ class JobPreparationActorSpec extends TestKitSuite("JobPrepActorSpecSystem") wit
     val finalValue = "library/ubuntu@sha256:71cd81252a3563a03ad8daee81047b62ab5d892ebbfbf71cf53415f29c130950"
     val actor = TestActorRef(helper.buildTestJobPreparationActor(1 minute, 1 minutes, List.empty, inputsAndAttributes, List.empty), self)
     actor ! Start
-    helper.dockerHashingActor.expectMsgClass(classOf[DockerHashRequest])
-    helper.dockerHashingActor.reply(DockerHashSuccessResponse(hashResult, mock[DockerHashRequest]))
+    helper.workflowDockerLookupActor.expectMsgClass(classOf[DockerHashRequest])
+    helper.workflowDockerLookupActor.reply(DockerHashSuccessResponse(hashResult, mock[DockerHashRequest]))
     expectMsgPF(5 seconds) {
       case success: BackendJobPreparationSucceeded =>
         success.jobDescriptor.runtimeAttributes("docker").valueString shouldBe dockerValue
@@ -131,8 +131,8 @@ class JobPreparationActorSpec extends TestKitSuite("JobPrepActorSpecSystem") wit
     val inputsAndAttributes = Success((inputs, attributes))
     val actor = TestActorRef(helper.buildTestJobPreparationActor(1 minute, 1 minutes, List.empty, inputsAndAttributes, List.empty), self)
     actor ! Start
-    helper.dockerHashingActor.expectMsgClass(classOf[DockerHashRequest])
-    helper.dockerHashingActor.reply(WorkflowDockerLookupFailure(new Exception("Failed to get docker hash - part of test flow"), request))
+    helper.workflowDockerLookupActor.expectMsgClass(classOf[DockerHashRequest])
+    helper.workflowDockerLookupActor.reply(WorkflowDockerLookupFailure(new Exception("Failed to get docker hash - part of test flow"), request))
     expectMsgPF(5 seconds) {
       case success: BackendJobPreparationSucceeded =>
         success.jobDescriptor.runtimeAttributes("docker").valueString shouldBe dockerValue

@@ -26,7 +26,7 @@ class JobPreparationTestHelper(implicit val system: ActorSystem) extends Mockito
   val jobKey = mock[BackendJobDescriptorKey]
   val serviceRegistryProbe = TestProbe()
   val ioActor = TestProbe()
-  val dockerHashingActor = TestProbe()
+  val workflowDockerLookupActor = TestProbe()
 
   val workflowId = WorkflowId.randomId()
   val scopedKeyMaker: ScopedKeyMaker = key => ScopedKey(workflowId, KvJobKey("correct.horse.battery.staple", None, 1), key)
@@ -45,7 +45,7 @@ class JobPreparationTestHelper(implicit val system: ActorSystem) extends Mockito
       inputsAndAttributes = inputsAndAttributes,
       executionData = executionData,
       jobKey = jobKey,
-      dockerHashingActor = dockerHashingActor.ref,
+      workflowDockerLookupActor = workflowDockerLookupActor.ref,
       serviceRegistryActor = serviceRegistryProbe.ref,
       ioActor = ioActor.ref,
       scopedKeyMaker))
@@ -59,13 +59,13 @@ private[preparation] class TestJobPreparationActor(kvStoreKeysForPrefetch: List[
                                                    inputsAndAttributes: Try[(Map[Declaration, WdlValue], Map[wdl4s.LocallyQualifiedName, WdlValue])],
                                                    executionData: WorkflowExecutionActorData,
                                                    jobKey: BackendJobDescriptorKey,
-                                                   dockerHashingActor: ActorRef,
+                                                   workflowDockerLookupActor: ActorRef,
                                                    serviceRegistryActor: ActorRef,
                                                    ioActor: ActorRef,
                                                    scopedKeyMaker: ScopedKeyMaker) extends JobPreparationActor(executionData = executionData,
                                                                                                   jobKey = jobKey,
                                                                                                   factory = null,
-                                                                                                  workflowDockerLookupActor = dockerHashingActor,
+                                                                                                  workflowDockerLookupActor = workflowDockerLookupActor,
                                                                                                   initializationData = None,
                                                                                                   serviceRegistryActor = serviceRegistryActor,
                                                                                                   ioActor = ioActor,
