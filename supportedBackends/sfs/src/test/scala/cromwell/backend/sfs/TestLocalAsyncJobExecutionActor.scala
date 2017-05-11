@@ -24,7 +24,7 @@ class TestLocalAsyncJobExecutionActor(override val standardParams: StandardAsync
     }
   }
 
-  override def dockerValueUsed: Option[String] = None
+  override def dockerImageUsed: Option[String] = None
 }
 
 object TestLocalAsyncJobExecutionActor {

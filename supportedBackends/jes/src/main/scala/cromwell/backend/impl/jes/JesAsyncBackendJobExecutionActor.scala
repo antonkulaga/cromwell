@@ -102,7 +102,7 @@ class JesAsyncBackendJobExecutionActor(override val standardParams: StandardAsyn
 
   private lazy val jobDockerImage = jobDescriptor.dockerWithHash.map(_.dockerAttribute).getOrElse(runtimeAttributes.dockerImage)
   
-  override lazy val dockerValueUsed: Option[String] = Option(jobDockerImage)
+  override lazy val dockerImageUsed: Option[String] = Option(jobDockerImage)
   
   override val preemptible: Boolean = previousRetryReasons match {
     case Valid(PreviousRetryReasons(p, ur)) => p < maxPreemption

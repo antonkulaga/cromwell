@@ -98,7 +98,7 @@ sealed trait ConfigAsyncJobExecutionActor extends SharedFileSystemAsyncJobExecut
     val declarationValidations = configInitializationData.declarationValidations
     val inputOptions = declarationValidations map {
       case declarationValidation if declarationValidation.key == DockerValidation.instance.key && jobDescriptor.dockerWithHash.isDefined =>
-        Option(declarationValidation.key -> WdlString(jobDescriptor.dockerWithHash.get.dockerAttribute))
+        Option(declarationValidation.key -> WdlString(dockerImageUsed.get))
       case declarationValidation =>
       declarationValidation.extractWdlValueOption(validatedRuntimeAttributes) map { wdlValue =>
         declarationValidation.key -> wdlValue
@@ -107,7 +107,10 @@ sealed trait ConfigAsyncJobExecutionActor extends SharedFileSystemAsyncJobExecut
     inputOptions.flatten.toMap
   }
   
-  override lazy val dockerValueUsed: Option[String] = runtimeAttributeInputs.get(DockerValidation.instance.key).map(_.valueString)
+  override lazy val dockerImageUsed: Option[String] = {
+    val runtimeAttributeDocker = runtimeAttributeInputs.get(DockerValidation.instance.key).map(_.valueString)
+    jobDescriptor.dockerWithHash.map(_.dockerAttribute).orElse(runtimeAttributeDocker)
+  }
 }
 
 /**

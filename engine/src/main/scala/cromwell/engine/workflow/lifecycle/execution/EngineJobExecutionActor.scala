@@ -232,7 +232,7 @@ class EngineJobExecutionActor(replyTo: ActorRef,
       disableCallCaching(Option(t))
       stay using data.copy(hashes = Option(Failure(t)))
 
-      //FIXME: Do something with "usedDockerValue" in the response:
+      //FIXME: Do something with "dockerValueUsed" in the response:
       // update the hashes if we have them and the value used is effectively a docker hash
       // Don't write anything if the value used is a tag...
     case Event(response: JobSucceededResponse, data @ ResponsePendingData(_, _, Some(Success(hashes)), _, _)) if effectiveCallCachingMode.writeToCache =>
@@ -496,6 +496,7 @@ class EngineJobExecutionActor(replyTo: ActorRef,
       case JobFailedNonRetryableResponse(jobKey: BackendJobDescriptorKey, throwable: Throwable, returnCode: Option[Int]) => saveUnsuccessfulJobResults(jobKey, returnCode, throwable, retryable = false)
       case JobFailedRetryableResponse(jobKey: BackendJobDescriptorKey, throwable: Throwable, returnCode: Option[Int]) => saveUnsuccessfulJobResults(jobKey, returnCode, throwable, retryable = true)
     }
+    updatedData.dockerImageUsed foreach { image => writeToMetadata(Map("dockerImageUsed" -> image)) }
     goto(UpdatingJobStore) using updatedData
   }
 
@@ -589,7 +590,7 @@ object EngineJobExecutionActor {
                                                     hashes: Option[Try[CallCacheHashes]] = None,
                                                     ejha: Option[ActorRef] = None,
                                                     cacheHit: Option[CacheHit] = None) extends EJEAData {
-    
+
     def withEJHA(ejha: ActorRef): EJEAData = this.copy(ejha = Option(ejha))
 
 
@@ -606,13 +607,17 @@ object EngineJobExecutionActor {
   private[execution] trait ResponseData extends EJEAData {
     def response: BackendJobExecutionResponse
     def hashes: Option[Try[CallCacheHashes]]
+    def dockerImageUsed: Option[String]
   }
 
   private[execution] case class SucceededResponseData(successResponse: JobSucceededResponse,
                                                       hashes: Option[Try[CallCacheHashes]] = None) extends ResponseData {
     override def response = successResponse
+    override def dockerImageUsed = successResponse.dockerImageUsed
   }
 
   private[execution] case class NotSucceededResponseData(response: BackendJobExecutionResponse,
-                                                         hashes: Option[Try[CallCacheHashes]] = None) extends ResponseData
+                                                         hashes: Option[Try[CallCacheHashes]] = None) extends ResponseData {
+    override def dockerImageUsed = None
+  }
 }
