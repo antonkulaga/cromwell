@@ -100,8 +100,19 @@ class WorkflowDockerLookupActor(workflowId: WorkflowId, val dockerHashingActor: 
   // In FailMode we reject all requests
   when(Failed) {
     case Event(request: DockerHashRequest, _) =>
-      sender() ! WorkflowDockerLookupFailure(FailedException, request)
-      stay()
+      failRequest(request, FailedException)
+  }
+
+  when(IsShutDown) {
+    // This really shouldn't happen since the WorkflowExecutionActor is the only thing that requests this actor to
+    // shut down, but imagine if abort didn't work perfectly.
+    case Event(request: DockerHashRequest, _) =>
+      failRequest(request, ShutdownException)
+  }
+
+  private def failRequest(request: DockerHashRequest, reason: Exception) = {
+    sender() ! WorkflowDockerLookupFailure(FailedException, request)
+    stay()
   }
 
   whenUnhandled {
@@ -110,12 +121,25 @@ class WorkflowDockerLookupActor(workflowId: WorkflowId, val dockerHashingActor: 
       // This is just catastrophic, we have no way of knowing the offending request so fail everything.
       failEverything(reason, data)
       stay()
+    case Event(ShutDown, data) =>
+      databaseInterface.removeDockerHashStoreEntries(workflowId.toString) onComplete {
+        case Success(_) =>
+          self ! TransitionToShutDown
+        case Failure(e) =>
+          log.error(s"Failed to remove docker hash store entries for workflow $workflowId")
+          self ! TransitionToFailed
+      }
+      stay()
+    case Event(TransitionToShutDown, _) => goto(IsShutDown)
+    case Event(TransitionToFailed, _) => goto(Failed)
   }
 
   onTransition {
-    // When transitioning to Failed, fail all enqueued requests
+    // When transitioning to Failed or IsShutDown, fail any enqueued requests
     case _ -> Failed =>
       failEverything(FailedException, stateData)
+    case _ -> IsShutDown =>
+      failEverything(ShutdownException, stateData)
   }
 
   /**
@@ -210,7 +234,9 @@ object WorkflowDockerLookupActor {
   case object LoadingCache extends WorkflowDockerLookupActorState
   case object Running extends WorkflowDockerLookupActorState
   case object Failed extends WorkflowDockerLookupActorState
-  val FailedException = new Exception(s"The service responsible for workflow level docker hash resolution failed to restart when the server restarted. Subsequent docker tags for this workflow won't be resolved.")
+  case object IsShutDown extends WorkflowDockerLookupActorState
+  private val FailedException = new Exception(s"The service responsible for workflow level docker hash resolution failed to restart when the server restarted. Subsequent docker tags for this workflow won't be resolved.")
+  private val ShutdownException = new Exception(s"The service responsible for workflow level docker hash resolution is being shut down at the request of the WorkflowExecutionActor.  All pending Docker hash lookup requests will be failed.")
 
   /* Internal ADTs */
   case class DockerRequestContext(dockerHashRequest: DockerHashRequest, replyTo: ActorRef)
@@ -220,6 +246,12 @@ object WorkflowDockerLookupActor {
   case class DockerHashStoreLoadingSuccess(dockerMappings: Map[String, String])
   case class DockerHashStoreLoadingFailure(reason: Throwable)
   case class DockerHashActorTimeout(message: String)
+
+  /* Messages */
+  sealed trait WorkflowDockerLookupActorMessage
+  case object ShutDown extends WorkflowDockerLookupActorMessage
+  private case object TransitionToShutDown extends WorkflowDockerLookupActorMessage
+  private case object TransitionToFailed extends WorkflowDockerLookupActorMessage
 
   /* Responses */
   final case class WorkflowDockerLookupFailure(reason: Throwable, request: DockerHashRequest)

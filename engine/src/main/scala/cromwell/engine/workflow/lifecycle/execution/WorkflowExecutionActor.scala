@@ -11,6 +11,7 @@ import cromwell.core.ExecutionStatus._
 import cromwell.core._
 import cromwell.core.logging.WorkflowLogging
 import cromwell.engine.backend.{BackendSingletonCollection, CromwellBackends}
+import cromwell.engine.workflow.WorkflowDockerLookupActor
 import cromwell.engine.workflow.lifecycle.execution.ExecutionStore.RunnableScopes
 import cromwell.engine.workflow.lifecycle.execution.WorkflowExecutionActor._
 import cromwell.engine.workflow.lifecycle.{EngineLifecycleActorAbortCommand, EngineLifecycleActorAbortedResponse}
@@ -222,6 +223,7 @@ case class WorkflowExecutionActor(workflowDescriptor: EngineWorkflowDescriptor,
   onTransition {
     case fromState -> toState if toState.terminal =>
       workflowLogger.debug(s"$tag transitioning from $fromState to $toState. Stopping self.")
+      workflowDockerLookupActor ! WorkflowDockerLookupActor.ShutDown
       context.stop(self)
     case fromState -> toState =>
       workflowLogger.debug(s"$tag transitioning from $fromState to $toState.")
