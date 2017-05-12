@@ -10,7 +10,7 @@ import cromwell.engine.workflow.WorkflowDockerLookupActor._
 import cromwell.services.SingletonServicesStore
 import lenthall.util.TryUtil
 
-import scala.concurrent.duration.{FiniteDuration, _}
+import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
@@ -193,7 +193,6 @@ class WorkflowDockerLookupActor(workflowId: WorkflowId, val dockerHashingActor: 
     stay() using updatedData
   }
 
-
   def handleStoreSuccess(response: DockerHashSuccessResponse, data: RunningData) = {
     // Add the new label to hash mapping to the current set of mappings.
     val request = response.request
@@ -289,7 +288,6 @@ object WorkflowDockerLookupActor {
 
     override def enqueued: Map[DockerHashRequest, List[ActorRef]] = queuedRequests
   }
-
 
   /**
     * @param awaitingHashes Requests that have gone out to the `DockerHashActor` which are awaiting hash resolution.

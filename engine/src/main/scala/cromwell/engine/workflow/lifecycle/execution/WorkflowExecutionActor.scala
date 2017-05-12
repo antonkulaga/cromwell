@@ -223,7 +223,8 @@ case class WorkflowExecutionActor(workflowDescriptor: EngineWorkflowDescriptor,
   onTransition {
     case fromState -> toState if toState.terminal =>
       workflowLogger.debug(s"$tag transitioning from $fromState to $toState. Stopping self.")
-      workflowDockerLookupActor ! WorkflowDockerLookupActor.ShutDown
+      // Shut down the lookup actor if the root workflow is shutting down.
+      if (workflowDescriptor.parentWorkflow.isEmpty) workflowDockerLookupActor ! WorkflowDockerLookupActor.ShutDown
       context.stop(self)
     case fromState -> toState =>
       workflowLogger.debug(s"$tag transitioning from $fromState to $toState.")
