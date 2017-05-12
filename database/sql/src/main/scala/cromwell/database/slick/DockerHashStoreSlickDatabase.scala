@@ -14,13 +14,11 @@ trait DockerHashStoreSlickDatabase extends DockerHashStoreSqlDatabase {
   import dataAccess.driver.api._
 
   /**
-    * Adds docker hash entries to the store.
+    * Adds a docker hash entry to the store.
     */
-  override def addDockerHashStoreEntries(dockerHashStoreEntries: Iterable[DockerHashStoreEntry])
-                               (implicit ec: ExecutionContext): Future[Unit] = {
-    // This will do a batch insert but we're currently not limiting the batch size.  That's probably ok given the
-    // scale of this particular case.
-    val action = dataAccess.dockerHashStoreEntries ++= dockerHashStoreEntries
+  override def addDockerHashStoreEntry(dockerHashStoreEntry: DockerHashStoreEntry)
+                                      (implicit ec: ExecutionContext): Future[Unit] = {
+    val action = dataAccess.dockerHashStoreEntries += dockerHashStoreEntry
     runTransaction(action) void
   }
 

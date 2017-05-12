@@ -16,10 +16,10 @@ import scala.util.{Failure, Success, Try}
 
 /**
   * Ensures docker hashes consistency throughout a workflow.
-  * 
+  *
   * Caches successful docker hash lookups and serve them to subsequent identical requests.
   * Persists those hashes in the database to be resilient to server restarts.
-  * 
+  *
   * Failure modes:
   * 1) Fail to load hashes from DB upon restart
   * 2) Fail to parse hashes from the DB upon restart
@@ -190,7 +190,7 @@ class WorkflowDockerLookupActor(workflowId: WorkflowId, val dockerHashingActor: 
 
   private def persistDockerHash(response: DockerHashSuccessResponse, data: RunningData): State = {
     val dockerHashStoreEntry = DockerHashStoreEntry(workflowId.toString, response.request.dockerImageID.fullName, response.dockerHash.algorithmAndHash)
-    databaseInterface.addDockerHashStoreEntries(Seq(dockerHashStoreEntry)) onComplete {
+    databaseInterface.addDockerHashStoreEntry(dockerHashStoreEntry) onComplete {
       case Success(_) => self ! DockerHashStoreSuccess(response)
       case Failure(ex) => self ! DockerHashStoreFailure(response.request, ex)
     }

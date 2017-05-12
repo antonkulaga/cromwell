@@ -232,9 +232,6 @@ class EngineJobExecutionActor(replyTo: ActorRef,
       disableCallCaching(Option(t))
       stay using data.copy(hashes = Option(Failure(t)))
 
-      //FIXME: Do something with "dockerValueUsed" in the response:
-      // update the hashes if we have them and the value used is effectively a docker hash
-      // Don't write anything if the value used is a tag...
     case Event(response: JobSucceededResponse, data @ ResponsePendingData(_, _, Some(Success(hashes)), _, _)) if effectiveCallCachingMode.writeToCache =>
       eventList ++= response.executionEvents
       saveCacheResults(hashes, data.withSuccessResponse(response))

@@ -10,10 +10,9 @@ trait DockerHashStoreSqlDatabase {
   /**
     * Adds docker hash entries to the store.
     *
-    * TODO why does this take an `Iterable` if it's only ever called singly?
     */
-  def addDockerHashStoreEntries(dockerHashStoreEntries: Iterable[DockerHashStoreEntry])
-                               (implicit ec: ExecutionContext): Future[Unit]
+  def addDockerHashStoreEntry(dockerHashStoreEntry: DockerHashStoreEntry)
+                             (implicit ec: ExecutionContext): Future[Unit]
 
   /**
     * Retrieves docker hash entries for a workflow.
