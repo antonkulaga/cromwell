@@ -59,7 +59,8 @@ class TesAsyncBackendJobExecutionActor(override val standardParams: StandardAsyn
     multiplier = 1.1
   )
   
-  override lazy val dockerImageUsed = Option(runtimeAttributes.dockerImage)
+  override lazy val dockerImageUsed: Option[String] =
+    jobDescriptor.dockerWithHash.map(_.dockerAttribute).orElse(Option(runtimeAttributes.dockerImage))
 
   private val tesEndpoint = workflowDescriptor.workflowOptions.getOrElse("endpoint", tesConfiguration.endpointURL)
 
@@ -92,7 +93,8 @@ class TesAsyncBackendJobExecutionActor(override val standardParams: StandardAsyn
   }
 
   def createTaskMessage(): TesTaskMessage = {
-    val task = TesTask(jobDescriptor, configurationDescriptor, jobLogger, tesJobPaths, runtimeAttributes, commandDirectory, backendEngineFunctions)
+    val task = TesTask(jobDescriptor, configurationDescriptor, jobLogger, tesJobPaths, runtimeAttributes, commandDirectory,
+      backendEngineFunctions, dockerImageUsed.get)
 
     tesJobPaths.script.write(commandScriptContents)
 

@@ -117,11 +117,10 @@ class WorkflowDockerLookupActor(workflowId: WorkflowId, val dockerHashingActor: 
   }
 
   whenUnhandled {
-    case Event(DockerHashActorTimeout(message), data) =>
+    case Event(DockerHashActorTimeout(message), data: RunningData) =>
+      // This is just catastrophic, we have no way of knowing the offending request, so just fail.
       val reason = new Exception(s"Timeout looking up docker hash: $message")
-      // This is just catastrophic, we have no way of knowing the offending request so fail everything.
-      failEverything(reason, data)
-      stay()
+      goto(Failed) using data.copy(failureCause = Option(reason))
     case Event(ShutDown, data) =>
       databaseInterface.removeDockerHashStoreEntries(workflowId.toString) onComplete {
         case Success(_) =>
