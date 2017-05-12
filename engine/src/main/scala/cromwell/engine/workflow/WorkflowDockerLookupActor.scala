@@ -15,16 +15,16 @@ import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
 /**
-  * Ensures docker hashes consistency throughout a workflow.
+  * Ensures docker hash consistency throughout a workflow.
   *
   * Caches successful docker hash lookups and serve them to subsequent identical requests.
   * Persists those hashes in the database to be resilient to server restarts.
   *
   * Failure modes:
-  * 1) Fail to load hashes from DB upon restart
-  * 2) Fail to parse hashes from the DB upon restart
-  * 3) Fail to write hash result to the DB
-  * 4) Fail to lookup docker hash
+  * 1) Failure to load hashes from the DB upon restart.
+  * 2) Failure to parse hashes from the DB upon restart.
+  * 3) Failure to write a hash result to the DB.
+  * 4) Failure to lookup a docker hash.
   *
   * Behavior:
   * 1-3) Return lookup failures for all requests, transition to a permanently Failed state.
@@ -37,9 +37,9 @@ class WorkflowDockerLookupActor(workflowId: WorkflowId, val dockerHashingActor: 
 
   implicit val ec = context.system.dispatchers.lookup(Dispatcher.EngineDispatcher)
 
-  // Amount of time after which the docker request should be considered lost and sent again
+  // Amount of time after which the docker request should be considered lost and sent again.
   override protected def backpressureTimeout: FiniteDuration = 10 seconds
-  // Amount of time to wait when we get a Backpressure response before sending the request again
+  // Amount of time to wait when we get a Backpressure response before sending the request again.
   override protected def backpressureRandomizerFactor: Double = 0.5D
 
   context.become(dockerReceive orElse receive)
@@ -65,7 +65,7 @@ class WorkflowDockerLookupActor(workflowId: WorkflowId, val dockerHashingActor: 
     super.preStart()
   }
 
-  // Waiting for a response from the database with the hash mapping for this workflow
+  // Waiting for a response from the database with the hash mapping for this workflow.
   when(LoadingCache) {
     case Event(request: DockerHashRequest, data) =>
       stay using data.enqueue(request, sender())
@@ -73,7 +73,7 @@ class WorkflowDockerLookupActor(workflowId: WorkflowId, val dockerHashingActor: 
       loadCache(dockerHashEntries, data)
   }
 
-  // The normal operational mode
+  // This is the normal operational mode.
   when(Running) {
     // This tag has already been looked up and its hash is in the mappings cache.
     case Event(request: DockerHashRequest, data: RunningData) if data.mappings.contains(request.dockerImageID) =>
@@ -123,7 +123,7 @@ class WorkflowDockerLookupActor(workflowId: WorkflowId, val dockerHashingActor: 
           fail(reason)
       }
       stay()
-    // When transitioning to Failed or IsShutDown, fail any enqueued requests
+    // When transitioning to the Terminal state, fail any enqueued requests.
     case Event(TransitionToShutDown, data) =>
       failAllRequests(ShutdownException, data)
       goto(Terminal) using data.withCause(ShutdownException)
