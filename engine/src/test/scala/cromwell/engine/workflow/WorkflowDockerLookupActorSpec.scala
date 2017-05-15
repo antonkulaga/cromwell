@@ -12,6 +12,7 @@ import cromwell.docker.{DockerHashRequest, DockerHashResult, DockerImageIdentifi
 import cromwell.engine.workflow.WorkflowActor.{RestartExistingWorkflow, StartMode, StartNewWorkflow}
 import cromwell.engine.workflow.WorkflowDockerLookupActor.{DockerHashActorTimeout, WorkflowDockerLookupFailure}
 import cromwell.engine.workflow.WorkflowDockerLookupActorSpec.TestWorkflowDockerLookupActor
+import cromwell.services.ServicesStore._
 import cromwell.services.SingletonServicesStore
 import org.scalatest.{BeforeAndAfter, FlatSpecLike, Matchers}
 import org.specs2.mock.Mockito
@@ -142,7 +143,7 @@ class WorkflowDockerLookupActorSpec extends TestKitSuite("WorkflowDockerLookupAc
     val mixedResponses = Set(1, 2) map { _ =>
       expectMsgPF(2 seconds) {
         case msg: DockerHashSuccessResponse => msg
-          // Scoop out the request here since we can't match the exception on the whole message.
+        // Scoop out the request here since we can't match the exception on the whole message.
         case msg: WorkflowDockerLookupFailure if msg.reason.getMessage == "Failed to get docker hash for library/ubuntu:older Lookup failed" => msg.request
       }
     }
@@ -201,10 +202,54 @@ class WorkflowDockerLookupActorSpec extends TestKitSuite("WorkflowDockerLookupAc
       DockerHashSuccessResponse(DockerHashResult("md5:AAAAA"), latestDockerRequest),
       DockerHashSuccessResponse(DockerHashResult("md5:BBBBB"), yesterdaysDockerRequest)))
   }
+
+  it should "not try to look up hashes if not restarting" in {
+
+    val workflowId = WorkflowId.randomId()
+    val dockerHashingActor = TestProbe()
+
+    val databaseConfig = ConfigFactory.load.getConfig("database")
+
+    val databaseInterface = new SlickDatabase(databaseConfig) {
+      override def queryDockerHashStoreEntries(workflowExecutionUuid: String)
+                                              (implicit ec: ExecutionContext): Future[Seq[DockerHashStoreEntry]] =
+        throw new RuntimeException("Should not query for docker hashes if not restarting!")
+    }.initialized
+
+    val lookupActor = TestActorRef(WorkflowDockerLookupActor.props(workflowId, dockerHashingActor.ref, StartNewWorkflow, databaseInterface))
+
+    val latestDockerValue = "ubuntu:latest"
+    val latestDockerId = DockerImageIdentifier.fromString(latestDockerValue).get.asInstanceOf[DockerImageIdentifierWithoutHash]
+    val latestDockerRequest = DockerHashRequest(latestDockerId)
+
+    val yesterdaysDockerValue = "ubuntu:yesterday"
+    val yesterdaysDockerId = DockerImageIdentifier.fromString(yesterdaysDockerValue).get.asInstanceOf[DockerImageIdentifierWithoutHash]
+    val yesterdaysDockerRequest = DockerHashRequest(yesterdaysDockerId)
+
+    lookupActor ! latestDockerRequest
+    lookupActor ! yesterdaysDockerRequest
+
+    dockerHashingActor.expectMsg(latestDockerRequest)
+    dockerHashingActor.expectMsg(yesterdaysDockerRequest)
+    val latestSuccessResponse = DockerHashSuccessResponse(DockerHashResult("md5", "AAAAA"), latestDockerRequest)
+    val yesterdaysSuccessResponse = DockerHashSuccessResponse(DockerHashResult("md5", "BBBBB"), yesterdaysDockerRequest)
+    dockerHashingActor.reply(latestSuccessResponse)
+    dockerHashingActor.reply(yesterdaysSuccessResponse)
+
+    val results = Set(1, 2) map { _ =>
+      expectMsgPF(2 seconds) {
+        case result: DockerHashSuccessResponse => result
+      }
+    }
+
+    results should equal(Set(latestSuccessResponse, yesterdaysSuccessResponse))
+  }
 }
 
 
 object WorkflowDockerLookupActorSpec {
+
   class TestWorkflowDockerLookupActor(workflowId: WorkflowId, dockerHashingActor: ActorRef, startMode: StartMode, override val backpressureTimeout: FiniteDuration)
     extends WorkflowDockerLookupActor(workflowId, dockerHashingActor, startMode, SingletonServicesStore.databaseInterface)
+
 }
