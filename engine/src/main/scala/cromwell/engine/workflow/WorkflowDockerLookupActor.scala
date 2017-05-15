@@ -2,6 +2,7 @@ package cromwell.engine.workflow
 
 import akka.actor.{ActorRef, LoggingFSM, Props}
 import cromwell.core.{Dispatcher, WorkflowId}
+import cromwell.database.sql.SqlDatabase
 import cromwell.database.sql.tables.DockerHashStoreEntry
 import cromwell.docker.DockerHashActor.{DockerHashFailureResponse, DockerHashSuccessResponse}
 import cromwell.docker.{DockerClientHelper, DockerHashRequest, DockerHashResult, DockerImageIdentifier}
@@ -32,7 +33,7 @@ import scala.util.{Failure, Success, Try}
   *      Any future requests for this tag will be attempted again.
   */
 
-class WorkflowDockerLookupActor(workflowId: WorkflowId, val dockerHashingActor: ActorRef, startMode: StartMode)
+class WorkflowDockerLookupActor private[workflow](workflowId: WorkflowId, val dockerHashingActor: ActorRef, startMode: StartMode, databaseInterface: SqlDatabase)
   extends LoggingFSM[WorkflowDockerLookupActorState, WorkflowDockerLookupActorData] with DockerClientHelper with SingletonServicesStore {
 
   implicit val ec = context.system.dispatchers.lookup(Dispatcher.EngineDispatcher)
@@ -242,8 +243,8 @@ object WorkflowDockerLookupActor {
   /* Responses */
   final case class WorkflowDockerLookupFailure(reason: Throwable, request: DockerHashRequest)
 
-  def props(workflowId: WorkflowId, dockerHashingActor: ActorRef, startMode: StartMode) = {
-    Props(new WorkflowDockerLookupActor(workflowId, dockerHashingActor, startMode))
+  def props(workflowId: WorkflowId, dockerHashingActor: ActorRef, startMode: StartMode, databaseInterface: SqlDatabase = SingletonServicesStore.databaseInterface) = {
+    Props(new WorkflowDockerLookupActor(workflowId, dockerHashingActor, startMode, databaseInterface))
   }
 
   object WorkflowDockerLookupActorData {
