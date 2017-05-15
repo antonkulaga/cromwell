@@ -24,7 +24,7 @@ import scala.util.{Failure, Success, Try}
   * 1) Failure to load hashes from the DB upon restart.
   * 2) Failure to parse hashes from the DB upon restart.
   * 3) Failure to write a hash result to the DB.
-  * 4) Failure to lookup a docker hash.
+  * 4) Failure to look up a docker hash.
   *
   * Behavior:
   * 1-3) Return lookup failures for all requests, transition to a permanently Failed state.
@@ -114,8 +114,8 @@ class WorkflowDockerLookupActor(workflowId: WorkflowId, val dockerHashingActor: 
       // We have no way of knowing the offending request.  The logic below fails all in-flight requests but soldiers on
       // in the current state.
       val reason = new Exception(s"Timeout looking up docker hash: $message")
-      failAllRequests(reason, data)
-      stay()
+      val updatedData = failAllRequests(reason, data)
+      stay() using updatedData
     case Event(ShutDown, _) =>
       databaseInterface.removeDockerHashStoreEntries(workflowId.toString) onComplete {
         case Success(_) =>
