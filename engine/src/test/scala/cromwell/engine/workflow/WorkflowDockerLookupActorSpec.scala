@@ -48,7 +48,23 @@ class WorkflowDockerLookupActorSpec extends TestKitSuite("WorkflowDockerLookupAc
     val workflowId = WorkflowId.randomId()
     val dockerHashingActor = TestProbe()
 
-    val lookupActor = TestActorRef(WorkflowDockerLookupActor.props(workflowId, dockerHashingActor.ref, StartNewWorkflow))
+    val databaseConfig = ConfigFactory.load.getConfig("database")
+
+    var numWrites = 0
+
+    val databaseInterface = new SlickDatabase(databaseConfig) {
+
+      override def queryDockerHashStoreEntries(workflowExecutionUuid: String)
+                                              (implicit ec: ExecutionContext): Future[Seq[DockerHashStoreEntry]] =
+        throw new RuntimeException("should not be called, this workflow is not restarting")
+
+      override def addDockerHashStoreEntry(dockerHashStoreEntry: DockerHashStoreEntry)(implicit ec: ExecutionContext): Future[Unit] = {
+        numWrites = numWrites + 1
+        Future.successful(())
+      }
+    }.initialized
+
+    val lookupActor = TestActorRef(WorkflowDockerLookupActor.props(workflowId, dockerHashingActor.ref, StartNewWorkflow, databaseInterface))
     val request = DockerHashRequest(dockerId)
     lookupActor ! request
     val response = DockerHashSuccessResponse(DockerHashResult("md5", "AAAAAAAA"), request)
@@ -58,12 +74,14 @@ class WorkflowDockerLookupActorSpec extends TestKitSuite("WorkflowDockerLookupAc
     dockerHashingActor.reply(response)
     // The WorkflowDockerLookupActor should forward the success message to this actor.
     expectMsg(response)
+    numWrites should equal(1)
 
     // Now the WorkflowDockerLookupActor should now have this hash in its mappings and should not query the dockerHashingActor again.
     dockerHashingActor.expectNoMsg()
     lookupActor ! request
     // The WorkflowDockerLookupActor should forward the success message to this actor.
     expectMsg(response)
+    numWrites should equal(1)
   }
 
   it should "soldier on after docker hashing actor timeouts" in {
@@ -176,7 +194,7 @@ class WorkflowDockerLookupActorSpec extends TestKitSuite("WorkflowDockerLookupAc
 
       override def addDockerHashStoreEntry(dockerHashStoreEntry: DockerHashStoreEntry)(implicit ec: ExecutionContext): Future[Unit] =
         throw new RuntimeException("This should not be called in this test, all the hashes requested should be present in the DB already!")
-    }
+    }.initialized
 
     val lookupActor = TestActorRef(WorkflowDockerLookupActor.props(workflowId, dockerHashingActor.ref, RestartExistingWorkflow, databaseInterface))
 
@@ -243,6 +261,52 @@ class WorkflowDockerLookupActorSpec extends TestKitSuite("WorkflowDockerLookupAc
     }
 
     results should equal(Set(latestSuccessResponse, yesterdaysSuccessResponse))
+  }
+
+  it should "handle hash write errors appropriately" in {
+    val dockerValue = "ubuntu:latest"
+    val dockerId = DockerImageIdentifier.fromString(dockerValue).get.asInstanceOf[DockerImageIdentifierWithoutHash]
+
+    val workflowId = WorkflowId.randomId()
+    val dockerHashingActor = TestProbe()
+
+    val databaseConfig = ConfigFactory.load.getConfig("database")
+
+    var numWrites = 0
+
+    val databaseInterface = new SlickDatabase(databaseConfig) {
+
+      override def queryDockerHashStoreEntries(workflowExecutionUuid: String)
+                                              (implicit ec: ExecutionContext): Future[Seq[DockerHashStoreEntry]] =
+        throw new RuntimeException("should not be called, this workflow is not restarting")
+
+      override def addDockerHashStoreEntry(dockerHashStoreEntry: DockerHashStoreEntry)(implicit ec: ExecutionContext): Future[Unit] = {
+        numWrites = numWrites + 1
+        if (numWrites == 1) Future.failed(new RuntimeException("Fake exception from a test.")) else Future.successful(())
+      }
+    }.initialized
+
+    val lookupActor = TestActorRef(WorkflowDockerLookupActor.props(workflowId, dockerHashingActor.ref, StartNewWorkflow, databaseInterface))
+    val request = DockerHashRequest(dockerId)
+    lookupActor ! request
+    val response = DockerHashSuccessResponse(DockerHashResult("md5", "AAAAAAAA"), request)
+
+    // The WorkflowDockerLookupActor should not have the hash for this tag yet and will need to query the dockerHashingActor.
+    dockerHashingActor.expectMsg(request)
+    dockerHashingActor.reply(response)
+    // The WorkflowDockerLookupActor is going to fail when it tries to write to that broken DB.
+    expectMsgPF(2 seconds) {
+      case fail: WorkflowDockerLookupFailure =>
+    }
+    numWrites should equal(1)
+
+    lookupActor ! request
+    // The WorkflowDockerLookupActor will query the dockerHashingActor again.
+    dockerHashingActor.expectMsg(request)
+    dockerHashingActor.reply(response)
+    // The WorkflowDockerLookupActor should forward the success message to this actor.
+    expectMsg(response)
+    numWrites should equal(2)
   }
 }
 

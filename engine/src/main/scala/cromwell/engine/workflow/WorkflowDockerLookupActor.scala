@@ -26,11 +26,14 @@ import scala.util.{Failure, Success, Try}
   * 2) Failure to parse hashes from the DB upon restart.
   * 3) Failure to write a hash result to the DB.
   * 4) Failure to look up a docker hash.
+  * 5) Timeout from DockerHashActor.
   *
   * Behavior:
-  * 1-3) Return lookup failures for all requests, transition to a permanently Failed state.
-  * 4)   Return lookup failure for current request and all pending requests for the same tag.
-  *      Any future requests for this tag will be attempted again.
+  * 1-2) Return lookup failures for all pending requests, transition to a permanently Failed state in which any future
+  *      requests will immediately return lookup failure.
+  * 3-4) Return lookup failure for the current request and all pending requests for the same tag.  Any future requests
+  *      for this tag will be attempted again.
+  * 5)   Return lookup failure for all pending requests.  Any future requests for these tags will be attempted again.
   */
 
 class WorkflowDockerLookupActor private[workflow](workflowId: WorkflowId, val dockerHashingActor: ActorRef, startMode: StartMode, databaseInterface: SqlDatabase)
@@ -93,9 +96,8 @@ class WorkflowDockerLookupActor private[workflow](workflowId: WorkflowId, val do
       handleLookupFailure(dockerResponse, data)
     case Event(DockerHashStoreSuccess(response), data: RunningData) =>
       recordMappingAndRespond(response, data)
-    case Event(DockerHashStoreFailure(request, e), _) =>
-      val reason = new Exception(s"Failure storing docker hash for ${request.dockerImageID.fullName}", e)
-      fail(reason)
+    case Event(DockerHashStoreFailure(request, e), data: RunningData) =>
+      handleStoreFailure(request, new Exception(s"Failure storing docker hash for ${request.dockerImageID.fullName}", e), data)
   }
 
   // In state Terminal we reject all requests with the cause set in the state data.
@@ -210,6 +212,13 @@ class WorkflowDockerLookupActor private[workflow](workflowId: WorkflowId, val do
 
     val updatedData = data.copy(awaitingHashes = data.awaitingHashes - request)
     stay using updatedData
+  }
+
+  private def handleStoreFailure(dockerHashRequest: DockerHashRequest, reason: Throwable, data: RunningData): State = {
+    // Fail all requests for this tag.
+    data.awaitingHashes(dockerHashRequest) foreach { _ ! WorkflowDockerLookupFailure(reason, dockerHashRequest) }
+    // Remove these requesters from the collection of those awaiting hashes.
+    stay() using data.copy(awaitingHashes = data.awaitingHashes - dockerHashRequest)
   }
 
   override protected def onTimeout(message: Any, to: ActorRef): Unit = self ! DockerHashActorTimeout
