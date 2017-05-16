@@ -8,7 +8,7 @@ import cromwell.core.callcaching._
 import cromwell.core.logging.WorkflowLogging
 import cromwell.docker.DockerHashActor.DockerHashSuccessResponse
 import cromwell.docker._
-import cromwell.engine.workflow.WorkflowDockerLookupActor.WorkflowDockerLookupFailure
+import cromwell.engine.workflow.WorkflowDockerLookupActor.{WorkflowDockerLookupFailure, WorkflowDockerLookupTerminated}
 import cromwell.engine.workflow.lifecycle.execution.WorkflowExecutionActorData
 import cromwell.engine.workflow.lifecycle.execution.preparation.CallPreparation._
 import cromwell.engine.workflow.lifecycle.execution.preparation.JobPreparationActor._
@@ -66,6 +66,8 @@ class JobPreparationActor(executionData: WorkflowExecutionActorData,
     case Event(WorkflowDockerLookupFailure(reason, _), data: JobPreparationHashLookupData) =>
       workflowLogger.warn("Docker lookup failed", reason)
       handleDockerHashFailed(data)
+    case Event(WorkflowDockerLookupTerminated(reason, _), data: JobPreparationHashLookupData) =>
+      sendFailureAndStop(reason)
   }
 
   whenUnhandled {

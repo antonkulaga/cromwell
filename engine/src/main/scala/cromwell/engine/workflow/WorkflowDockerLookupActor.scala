@@ -117,7 +117,7 @@ class WorkflowDockerLookupActor private[workflow](workflowId: WorkflowId, val do
       // We have no way of knowing the offending request.  The logic below fails all in-flight requests but soldiers on
       // in the current state.
       val reason = new Exception(s"Timeout looking up docker hash: $message")
-      val updatedData = failAllRequests(reason, data)
+      val updatedData = respondToAllRequestsWithLookupFailure(reason, data)
       stay() using updatedData
     case Event(ShutDown, _) =>
       databaseInterface.removeDockerHashStoreEntries(workflowId.toString) onComplete {
@@ -128,13 +128,14 @@ class WorkflowDockerLookupActor private[workflow](workflowId: WorkflowId, val do
           fail(reason)
       }
       stay()
-    // When transitioning to the Terminal state, fail any enqueued requests.
+    // When transitioning to the shutdown state, respond with lookup failures for any remaining requests
+    // (there shouldn't be any, but just in case).
     case Event(TransitionToShutDown, data) =>
-      val updatedData = failAllRequests(ShutdownException, data)
+      val updatedData = respondToAllRequestsWithLookupFailure(ShutdownException, data)
       goto(Terminal) using updatedData.withFailureCause(ShutdownException)
     case Event(TransitionToFailed(cause), data) =>
       log.error(cause, s"Workflow Docker lookup actor for $workflowId transitioning to Failed")
-      val updatedData = failAllRequests(FailedException, data)
+      val updatedData = respondToAllRequestsWithTerminatedStatus(FailedException, data)
       goto(Terminal) using updatedData.withFailureCause(FailedException)
   }
 
@@ -166,7 +167,7 @@ class WorkflowDockerLookupActor private[workflow](workflowId: WorkflowId, val do
         goto(Running) using newData
 
       case Failure(e) =>
-        val reason = new Exception("Failed to load docker tag -> hash mappings from DB", e)
+        val reason = new Exception("Failed to parse docker tag -> hash mappings from DB", e)
         fail(reason)
     }
   }
@@ -187,11 +188,21 @@ class WorkflowDockerLookupActor private[workflow](workflowId: WorkflowId, val do
     stay using updatedData
   }
 
-  private def failAllRequests(reason: Throwable, data: WorkflowDockerLookupActorData): WorkflowDockerLookupActorData = {
+  private def respondToAllRequests(reason: Throwable,
+                                   data: WorkflowDockerLookupActorData,
+                                   messageBuilder: (Throwable, DockerHashRequest) => WorkflowDockerLookupResponse): WorkflowDockerLookupActorData = {
     data.hashRequests foreach { case (request, replyTos) =>
-      replyTos foreach { _ ! WorkflowDockerLookupFailure(reason, request) }
+      replyTos foreach { _ ! messageBuilder(reason, request) }
     }
     data.clearHashRequests
+  }
+
+  private def respondToAllRequestsWithLookupFailure(reason: Throwable, data: WorkflowDockerLookupActorData): WorkflowDockerLookupActorData = {
+    respondToAllRequests(reason, data, WorkflowDockerLookupFailure.apply)
+  }
+
+  private def respondToAllRequestsWithTerminatedStatus(reason: Throwable, data: WorkflowDockerLookupActorData): WorkflowDockerLookupActorData = {
+    respondToAllRequests(reason, data, WorkflowDockerLookupTerminated.apply)
   }
 
   private def persistDockerHash(response: DockerHashSuccessResponse, data: RunningData): State = {
@@ -250,7 +261,9 @@ object WorkflowDockerLookupActor {
   private case class TransitionToFailed(cause: Throwable) extends WorkflowDockerLookupActorMessage
 
   /* Responses */
-  final case class WorkflowDockerLookupFailure(reason: Throwable, request: DockerHashRequest)
+  sealed trait WorkflowDockerLookupResponse
+  final case class WorkflowDockerLookupFailure(reason: Throwable, request: DockerHashRequest) extends WorkflowDockerLookupResponse
+  final case class WorkflowDockerLookupTerminated(reason: Throwable, request: DockerHashRequest) extends WorkflowDockerLookupResponse
 
   def props(workflowId: WorkflowId, dockerHashingActor: ActorRef, startMode: StartMode, databaseInterface: SqlDatabase = SingletonServicesStore.databaseInterface) = {
     Props(new WorkflowDockerLookupActor(workflowId, dockerHashingActor, startMode, databaseInterface))
