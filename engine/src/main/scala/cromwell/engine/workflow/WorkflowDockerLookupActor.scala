@@ -49,18 +49,11 @@ class WorkflowDockerLookupActor private[workflow](workflowId: WorkflowId, val do
 
   context.become(dockerReceive orElse receive)
 
-  private val restart = startMode == RestartExistingWorkflow
+  {
+    val restart = startMode == RestartExistingWorkflow
+    val initialState = if (restart) AwaitingFirstRequestOnRestart else Running
 
-  startWith(if (restart) AwaitingFirstRequestOnRestart else Running, WorkflowDockerLookupActorData.empty)
-
-  def loadDockerHashStoreEntries(): Unit = {
-    databaseInterface.queryDockerHashStoreEntries(workflowId.toString) onComplete {
-      case Success(dockerHashEntries) =>
-        val dockerMappings = dockerHashEntries.map(entry => entry.dockerTag -> entry.dockerHash).toMap
-        self ! DockerHashStoreLoadingSuccess(dockerMappings)
-      case Failure(ex) =>
-        fail(new RuntimeException("Failed to load docker tag -> hash mappings from DB", ex))
-    }
+    startWith(initialState, WorkflowDockerLookupActorData.empty)
   }
 
   // `AwaitingFirstRequestOnRestart` is only used in restart scenarios.  This state waits until there's at least one hash
@@ -235,6 +228,16 @@ class WorkflowDockerLookupActor private[workflow](workflowId: WorkflowId, val do
     data.hashRequests(dockerHashRequest) foreach { _ ! WorkflowDockerLookupFailure(reason, dockerHashRequest) }
     // Remove these requesters from the collection of those awaiting hashes.
     stay() using data.copy(hashRequests = data.hashRequests - dockerHashRequest)
+  }
+
+  def loadDockerHashStoreEntries(): Unit = {
+    databaseInterface.queryDockerHashStoreEntries(workflowId.toString) onComplete {
+      case Success(dockerHashEntries) =>
+        val dockerMappings = dockerHashEntries.map(entry => entry.dockerTag -> entry.dockerHash).toMap
+        self ! DockerHashStoreLoadingSuccess(dockerMappings)
+      case Failure(ex) =>
+        fail(new RuntimeException("Failed to load docker tag -> hash mappings from DB", ex))
+    }
   }
 
   override protected def onTimeout(message: Any, to: ActorRef): Unit = self ! DockerHashActorTimeout

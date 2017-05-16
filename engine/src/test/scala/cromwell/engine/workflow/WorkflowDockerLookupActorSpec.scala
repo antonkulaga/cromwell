@@ -10,7 +10,7 @@ import cromwell.database.sql.tables.DockerHashStoreEntry
 import cromwell.docker.DockerHashActor.{DockerHashFailedResponse, DockerHashSuccessResponse}
 import cromwell.docker.{DockerHashRequest, DockerHashResult, DockerImageIdentifier, DockerImageIdentifierWithoutHash}
 import cromwell.engine.workflow.WorkflowActor.{RestartExistingWorkflow, StartMode, StartNewWorkflow}
-import cromwell.engine.workflow.WorkflowDockerLookupActor.{DockerHashActorTimeout, WorkflowDockerLookupFailure}
+import cromwell.engine.workflow.WorkflowDockerLookupActor.{DockerHashActorTimeout, WorkflowDockerLookupFailure, WorkflowDockerTerminalFailure}
 import cromwell.engine.workflow.WorkflowDockerLookupActorSpec.TestWorkflowDockerLookupActor
 import cromwell.services.ServicesStore._
 import cromwell.services.SingletonServicesStore
@@ -307,6 +307,76 @@ class WorkflowDockerLookupActorSpec extends TestKitSuite("WorkflowDockerLookupAc
     // The WorkflowDockerLookupActor should forward the success message to this actor.
     expectMsg(response)
     numWrites should equal(2)
+  }
+
+  it should "emit a terminal failure message if failing to read hashes on restart" in {
+    val dockerValue = "ubuntu:latest"
+    val dockerId = DockerImageIdentifier.fromString(dockerValue).get.asInstanceOf[DockerImageIdentifierWithoutHash]
+
+    val workflowId = WorkflowId.randomId()
+    val dockerHashingActor = TestProbe()
+
+    val databaseConfig = ConfigFactory.load.getConfig("database")
+
+    var numReads = 0
+
+    val databaseInterface = new SlickDatabase(databaseConfig) {
+
+      override def queryDockerHashStoreEntries(workflowExecutionUuid: String)
+                                              (implicit ec: ExecutionContext): Future[Seq[DockerHashStoreEntry]] = {
+        numReads = numReads + 1
+        Future.failed(new Exception("Don't worry this is just a dummy failure in a test"))
+      }
+    }.initialized
+
+    val lookupActor = TestActorRef(WorkflowDockerLookupActor.props(workflowId, dockerHashingActor.ref, RestartExistingWorkflow, databaseInterface))
+    val request = DockerHashRequest(dockerId)
+    lookupActor ! request
+
+    dockerHashingActor.expectNoMsg()
+
+    expectMsgPF(2 seconds) {
+      case terminal: WorkflowDockerTerminalFailure =>
+    }
+
+    numReads should equal(1)
+  }
+
+  it should "emit a terminal failure message if unable to parse hashes read from the database on restart" in {
+    val dockerValue = "ubuntu:latest"
+    val dockerId = DockerImageIdentifier.fromString(dockerValue).get.asInstanceOf[DockerImageIdentifierWithoutHash]
+
+    val workflowId = WorkflowId.randomId()
+    val dockerHashingActor = TestProbe()
+
+    val databaseConfig = ConfigFactory.load.getConfig("database")
+
+    var numReads = 0
+
+    val databaseInterface = new SlickDatabase(databaseConfig) {
+
+      override def queryDockerHashStoreEntries(workflowExecutionUuid: String)
+                                              (implicit ec: ExecutionContext): Future[Seq[DockerHashStoreEntry]] = Future.successful {
+        numReads = numReads + 1
+        Seq(
+          DockerHashStoreEntry(workflowId.toString, "ubuntu:latest", "md5:AAAAA"),
+          // missing the "algorithm:" preceding the hash value so this should fail parsing.
+          DockerHashStoreEntry(workflowId.toString, "ubuntu:yesterday", "BBBBB")
+        )
+      }
+    }.initialized
+
+    val lookupActor = TestActorRef(WorkflowDockerLookupActor.props(workflowId, dockerHashingActor.ref, RestartExistingWorkflow, databaseInterface))
+    val request = DockerHashRequest(dockerId)
+    lookupActor ! request
+
+    dockerHashingActor.expectNoMsg()
+
+    expectMsgPF(2 seconds) {
+      case terminal: WorkflowDockerTerminalFailure =>
+    }
+
+    numReads should equal(1)
   }
 }
 
