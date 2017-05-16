@@ -389,7 +389,8 @@ class MaterializeWorkflowDescriptorActor(serviceRegistryActor: ActorRef,
         List.empty
       }
       WdlNamespaceWithWorkflow.load(w.wdlSource, importResolvers) match {
-        case Failure(e) => s"Unable to load namespace from workflow: ${e.getMessage}".invalidNel
+        case Failure(e) =>
+          s"Unable to load namespace from workflow: ${e.getMessage}".invalidNel
         case Success(namespace) => validateWorkflowNameLengths(namespace)
       }
   }
