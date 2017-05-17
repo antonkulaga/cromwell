@@ -42,6 +42,7 @@ class CromwellApiHandler(requestHandlerActor: ActorRef) extends Actor with Workf
   val log = Logging(context.system, classOf[CromwellApiHandler])
   val conf = ConfigFactory.load()
 
+  // FIXME: appears to not be used at all
   def callNotFound(callFqn: String, id: WorkflowId) = {
     RequestComplete((StatusCodes.NotFound, APIResponse.error(
       new RuntimeException(s"Call $callFqn not found for workflow '$id'."))))
