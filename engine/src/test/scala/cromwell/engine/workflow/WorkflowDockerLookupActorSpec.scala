@@ -94,6 +94,7 @@ class WorkflowDockerLookupActorSpec extends TestKitSuite("WorkflowDockerLookupAc
     val lookupActor = TestActorRef(WorkflowDockerLookupActor.props(workflowId, dockerHashingActor.ref, StartNewWorkflow))
     val latestRequest = DockerHashRequest(latestDockerId)
     val olderRequest = DockerHashRequest(olderDockerId)
+    val olderResponse = DockerHashSuccessResponse(DockerHashResult("md5", "BBBBBBBB"), olderRequest)
 
     lookupActor ! latestRequest
     lookupActor ! olderRequest
@@ -105,6 +106,10 @@ class WorkflowDockerLookupActorSpec extends TestKitSuite("WorkflowDockerLookupAc
     dockerHashingActor.expectMsg(latestRequest)
     dockerHashingActor.expectMsg(olderRequest)
     dockerHashingActor.reply(timeout)
+    // Send a response for the older request after sending the timeout.  This should cause a mapping to be entered in the
+    // WorkflowDockerLookupActor for the older request, which will keep the WorkflowDockerLookupActor from querying the
+    // DockerHashActor for this hash again.
+    dockerHashingActor.reply(olderResponse)
     // This actor should see failure messages for the pending requests.
     val expectedMessage = "Timeout looking up docker hash: " + timeoutReason
     val failedRequests = Set(1, 2) map { _ =>
@@ -115,15 +120,12 @@ class WorkflowDockerLookupActorSpec extends TestKitSuite("WorkflowDockerLookupAc
 
     Set(latestRequest, olderRequest) should equal(failedRequests)
 
-    // Try again.  The hashing actor should receive the messages and this time won't time out.
+    // Try again.  The hashing actor should receive the latest message and this time won't time out.
     lookupActor ! latestRequest
     lookupActor ! olderRequest
     dockerHashingActor.expectMsg(latestRequest)
-    dockerHashingActor.expectMsg(olderRequest)
     val latestResponse = DockerHashSuccessResponse(DockerHashResult("md5", "AAAAAAAA"), latestRequest)
-    val olderResponse = DockerHashSuccessResponse(DockerHashResult("md5", "BBBBBBBB"), olderRequest)
     dockerHashingActor.reply(latestResponse)
-    dockerHashingActor.reply(olderResponse)
 
     val hashResponses = Set(1, 2) map { _ =>
       expectMsgPF(2 seconds) {

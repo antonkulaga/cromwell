@@ -180,7 +180,12 @@ class WorkflowDockerLookupActor private[workflow](workflowId: WorkflowId, val do
   private def recordMappingAndRespond(response: DockerHashSuccessResponse, data: WorkflowDockerLookupActorData): State = {
     // Add the new label to hash mapping to the current set of mappings.
     val request = response.request
-    val replyTos = data.hashRequests(request)
+    // Handle `hashRequests` carefully.  There's a possibility that we could have received a `DockerHashActorTimeout` message
+    // which cleared out all the hash requests in the state data, but then we got a hash response for a request that wasn't
+    // the request which generated the timeout.  The `JobPreparationActor`s corresponding to this request will already have
+    // received lookup failure messages.  tl;dr we shouldn't assume that there's an entry in `hashRequests` corresponding to
+    // the request in this response.
+    val replyTos = data.hashRequests.get(request).toList.flatten
     replyTos foreach { _ ! DockerHashSuccessResponse(response.dockerHash, request) }
     val updatedData = data.copy(hashRequests = data.hashRequests - request, mappings = data.mappings + (request.dockerImageID -> response.dockerHash))
     stay using updatedData
@@ -217,15 +222,18 @@ class WorkflowDockerLookupActor private[workflow](workflowId: WorkflowId, val do
     // again in the future.
     val failureReponse = WorkflowDockerLookupFailure(new Exception(dockerResponse.reason), dockerResponse.request)
     val request = dockerResponse.request
-    data.hashRequests(request) foreach { _ ! failureReponse }
+    // Due to hashing timeouts, failures might come in for requests which are no longer in the state data.  Be defensive
+    // with the .get.toList.flatten.
+    data.hashRequests.get(request).toList.flatten foreach { _ ! failureReponse }
 
     val updatedData = data.copy(hashRequests = data.hashRequests - request)
     stay using updatedData
   }
 
   private def handleStoreFailure(dockerHashRequest: DockerHashRequest, reason: Throwable, data: WorkflowDockerLookupActorData): State = {
-    // Fail all requests for this tag.
-    data.hashRequests(dockerHashRequest) foreach { _ ! WorkflowDockerLookupFailure(reason, dockerHashRequest) }
+    // Fail all requests for this tag.  The defensive handling of `hashRequests` accounts for the disruptive effect of timeouts
+    // which purge all pending requests.
+    data.hashRequests.get(dockerHashRequest).toList.flatten foreach { _ ! WorkflowDockerLookupFailure(reason, dockerHashRequest) }
     // Remove these requesters from the collection of those awaiting hashes.
     stay() using data.copy(hashRequests = data.hashRequests - dockerHashRequest)
   }
