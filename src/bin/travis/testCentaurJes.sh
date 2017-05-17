@@ -40,7 +40,6 @@ exitScript() {
 
 trap exitScript EXIT
 printTravisHeartbeat
-cromwellLogTail
 
 set -x
 
