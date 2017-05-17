@@ -104,20 +104,18 @@ trait MetadataSlickDatabase extends MetadataSqlDatabase {
       for {
         _ <- dataAccess.customLabelEntryIdsAutoInc.insertOrUpdate(customLabelEntry)
       } yield ()
-    } else {
-      for {
-        updateCount <- dataAccess.entryByWorkflowUuidLabelKeyLabelValue((
-            metadataEntry.workflowExecutionUuid,
-            labelKey,
-            labelValue)).update(customLabelEntry)
-        _ <- updateCount match {
-          case 0 => dataAccess.customLabelEntryIdsAutoInc += customLabelEntry
-          case _ => {
-            println(s"WTF:: Trying to readd add ${metadataEntry.workflowExecutionUuid}, $labelKey, $labelValue")
-            assertUpdateCount("upsertCustomLabelEntry", updateCount, 1)
-          }
-        }
-      } yield ()
+    }
+    else {
+       for {
+         updateCount <- dataAccess.entryByWorkflowUuidLabelKeyLabelValue((
+             metadataEntry.workflowExecutionUuid,
+           labelKey,
+           labelValue)).update(customLabelEntry)
+         _ <- updateCount match {
+           case 0 => dataAccess.customLabelEntryIdsAutoInc += customLabelEntry
+           case _ => assertUpdateCount("upsertCustomLabelEntry", updateCount, 1)
+         }
+       } yield()
     }
   }
 
@@ -152,8 +150,9 @@ trait MetadataSlickDatabase extends MetadataSqlDatabase {
       previousMetadataEntryId = previousMetadataEntryIdOption.getOrElse(0L)
       metadataEntries <- dataAccess.metadataEntriesForIdGreaterThanOrEqual((
         previousMetadataEntryId + 1L, startMetadataKey, endMetadataKey, nameMetadataKey, statusMetadataKey, likeMetadataLabelKey)).result
-      (customLabelEntries, metadataWithoutLabels) = metadataEntries.partition(_.metadataKey.contains(labelMetadataKey))
-      _ <- DBIO.sequence(metadataWithoutLabels.groupBy(_.workflowExecutionUuid) map updateWorkflowMetadataSummaryEntry(buildUpdatedSummary))
+      metadataWithoutLabels = metadataEntries.filterNot(_.metadataKey.contains(labelMetadataKey)).groupBy(_.workflowExecutionUuid)
+      customLabelEntries = metadataEntries.filter(_.metadataKey.contains(labelMetadataKey))
+      _ <- DBIO.sequence(metadataWithoutLabels map updateWorkflowMetadataSummaryEntry(buildUpdatedSummary))
       _ <- DBIO.sequence(customLabelEntries map upsertCustomLabelEntry)
       maximumMetadataEntryId = previousOrMaximum(previousMetadataEntryId, metadataEntries.map(_.metadataEntryId.get))
       _ <- upsertSummaryStatusEntryMaximumId(

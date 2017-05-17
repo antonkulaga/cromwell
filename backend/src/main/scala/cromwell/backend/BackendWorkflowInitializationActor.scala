@@ -81,25 +81,6 @@ trait BackendWorkflowInitializationActor extends BackendWorkflowLifecycleActor w
     serviceRegistryActor ! PutMetadataAction(MetadataEvent(MetadataKey(workflowDescriptor.id, None, WorkflowMetadataKeys.WorkflowRoot), MetadataValue(workflowRoot)))
   }
 
-  protected def publishDefaultLabelsToMetadata(): Unit = {
-    val defaultLabels = Map(
-        "cromwell-workflow-id" -> s"cromwell-${workflowDescriptor.rootWorkflowId}",
-        "cromwell-workflow-name" -> workflowDescriptor.rootWorkflow.unqualifiedName
-    )
-    labelsToMetadata(defaultLabels)
-  }
-
-  protected def publishCustomLabelsToMetadata(): Unit = {
-    labelsToMetadata(workflowDescriptor.customLabels.value map { case x => (x.key, x.value)} )
-  }
-
-  protected def labelsToMetadata(labels: Iterable[(String, String)]): Unit = {
-    labels foreach { case (k, v) =>
-      serviceRegistryActor ! PutMetadataAction(MetadataEvent(MetadataKey(workflowDescriptor.id, None, s"${WorkflowMetadataKeys.Labels}:${k}"), MetadataValue(v)))
-    }
-  }
-
-
   protected def coerceDefaultRuntimeAttributes(options: WorkflowOptions): Try[Map[String, WdlValue]]
 
   /**

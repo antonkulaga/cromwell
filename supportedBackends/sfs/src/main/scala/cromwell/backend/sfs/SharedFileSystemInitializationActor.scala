@@ -48,8 +48,6 @@ class SharedFileSystemInitializationActor(standardParams: StandardInitialization
   override def beforeAll(): Future[Option[BackendInitializationData]] = {
     Future.fromTry(Try {
       publishWorkflowRoot(workflowPaths.workflowRoot.pathAsString)
-      publishDefaultLabelsToMetadata()
-      publishCustomLabelsToMetadata()
       workflowPaths.workflowRoot.createPermissionedDirectories()
       Option(initializationData)
     })
