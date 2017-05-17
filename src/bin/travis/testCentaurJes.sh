@@ -26,7 +26,6 @@ printTravisHeartbeat() {
     TRAVIS_HEARTBEAT_PID=$!
 }
 
-
 killTravisHeartbeat() {
     if [ -n "${TRAVIS_HEARTBEAT_PID+set}" ]; then
         kill ${TRAVIS_HEARTBEAT_PID} || true
