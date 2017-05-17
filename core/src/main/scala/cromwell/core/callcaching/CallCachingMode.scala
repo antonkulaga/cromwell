@@ -36,3 +36,5 @@ case object WriteCache extends ReadWriteMode { override val r = false }
 case object ReadAndWriteCache extends ReadWriteMode
 
 final case class CallCachingOptions(invalidateBadCacheResults: Boolean = true)
+
+case class DockerWithHash(dockerAttribute: String)
